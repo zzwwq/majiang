@@ -1,0 +1,2500 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>县城麻将 - 单机人机对战</title>
+    <style>
+        :root {
+            --bg-color: #050d08;
+            --table-felt: #114b2d;
+            --table-felt-inner: #0d3a22;
+            --table-border: #1c110a;
+            --tile-bg: linear-gradient(180deg, #ffffff 0%, #f4efe2 80%, #dfd3bd 100%);
+            --tile-back-green: linear-gradient(180deg, #27ae60 0%, #1e824c 100%);
+            --accent-gold: #f39c12;
+            --danger-red: #e74c3c;
+            --btn-blue: #3498db;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Kaiti SC", sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        #app {
+            width: 100vw;
+            height: 100vh;
+            max-width: 1366px;
+            max-height: 850px;
+            background-color: #071910;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            box-shadow: 0 0 40px rgba(0,0,0,0.9);
+        }
+
+        .header {
+            height: 46px;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 16px;
+            font-size: 14px;
+            z-index: 30;
+            border-bottom: 1px solid rgba(255,255,255,0.15);
+        }
+
+        .header-title {
+            font-weight: bold;
+            font-size: 16px;
+            color: var(--accent-gold);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .controls-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        select, button {
+            background: #1c3024;
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.25);
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        select:hover, button:hover {
+            background: #2a4736;
+            border-color: var(--accent-gold);
+        }
+
+        .btn-gold {
+            background: linear-gradient(180deg, #f39c12, #d35400);
+            color: #fff;
+            font-weight: bold;
+            border: none;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+        }
+        .btn-gold:hover {
+            background: linear-gradient(180deg, #f1c40f, #e67e22);
+        }
+
+        .mahjong-table {
+            flex: 1;
+            background: radial-gradient(circle at center, var(--table-felt) 0%, var(--table-felt-inner) 75%, #061c10 100%);
+            border: 12px solid var(--table-border);
+            position: relative;
+            display: grid;
+            grid-template-rows: 120px 1fr 160px;
+            grid-template-columns: 110px 1fr 110px;
+            overflow: hidden;
+            box-shadow: inset 0 0 40px rgba(0,0,0,0.8);
+        }
+
+        .player-area {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .player-info {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0,0,0,0.6);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            border: 1px solid rgba(255,255,255,0.2);
+            z-index: 25;
+            transition: border-color 0.3s, box-shadow 0.3s;
+            position: relative;
+            cursor: pointer;
+        }
+        .player-info.active {
+            border-color: var(--accent-gold);
+            box-shadow: 0 0 12px var(--accent-gold);
+        }
+        .player-score {
+            color: var(--accent-gold);
+            font-weight: bold;
+            font-size: 11px;
+        }
+
+        .dealer-badge {
+            background: #e74c3c;
+            color: #fff;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 1px 4px;
+            border-radius: 3px;
+            margin-left: 4px;
+            border: 1px solid #f1c40f;
+            display: inline-block;
+        }
+
+        .area-north { grid-row: 1; grid-column: 2; flex-direction: column; justify-content: flex-start; padding-top: 4px; gap: 4px; }
+        .area-west { grid-row: 2; grid-column: 1; flex-direction: column; justify-content: center; gap: 6px; }
+        .area-east { grid-row: 2; grid-column: 3; flex-direction: column; justify-content: center; gap: 6px; }
+        .area-south { grid-row: 3; grid-column: 1 / span 3; flex-direction: column; justify-content: flex-end; padding-bottom: 6px; z-index: 20; }
+
+        .area-center {
+            grid-row: 2;
+            grid-column: 2;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        .center-board {
+            width: 210px;
+            min-height: 135px;
+            padding: 8px;
+            background: #092416;
+            border-radius: 10px;
+            border: 3px solid #1a6e3d;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 4px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.7), inset 0 0 10px rgba(0,0,0,0.6);
+            z-index: 20;
+            text-align: center;
+        }
+
+        .turn-indicator {
+            font-size: 14px;
+            font-weight: bold;
+            color: #2ecc71;
+        }
+
+        .action-announcement {
+            color: #f1c40f;
+            font-size: 13px;
+            font-weight: bold;
+            background: rgba(0,0,0,0.85);
+            padding: 4px 8px;
+            border-radius: 8px;
+            border: 1px solid var(--accent-gold);
+            display: none;
+            width: 100%;
+            word-break: break-all;
+            animation: pulse 1s infinite alternate;
+        }
+
+        .discards-grid {
+            position: absolute;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px;
+            z-index: 15;
+            max-width: 144px;
+        }
+        
+        .discards-north { top: 6px; left: 50%; transform: translateX(-50%); justify-content: center; }
+        .discards-south { bottom: 6px; left: 50%; transform: translateX(-50%); justify-content: center; }
+        .discards-west { left: 8px; top: 50%; transform: translateY(-50%); justify-content: flex-start; }
+        .discards-east { right: 8px; top: 50%; transform: translateY(-50%); justify-content: flex-end; }
+
+        .melds-container { display: flex; gap: 4px; z-index: 22; }
+        .side-melds { display: flex; flex-direction: column; gap: 4px; transform: scale(0.85); max-height: 180px; }
+
+        .meld-group {
+            display: flex;
+            gap: 1px;
+            background: rgba(0,0,0,0.4);
+            padding: 2px;
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .tile.angang-back {
+            background: var(--tile-back-green) !important;
+            border: 1px solid #145a32 !important;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.5) !important;
+        }
+        .tile.angang-back .tile-num, .tile.angang-back .tile-char { display: none !important; }
+
+        .tile {
+            background: var(--tile-bg);
+            border-radius: 4px;
+            border: 1px solid #bba37f;
+            box-shadow: 1px 3px 5px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.15s ease, margin 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .tile.back-top {
+            width: 24px;
+            height: 34px;
+            background: var(--tile-back-green);
+            border: 1px solid #145a32;
+            border-radius: 3px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+        }
+
+        .side-tile-wall { display: flex; flex-direction: column; gap: 1px; }
+        .side-tile {
+            width: 16px;
+            height: 24px;
+            background: linear-gradient(90deg, #1e824c 0%, #27ae60 70%, #145a32 100%);
+            border: 1px solid #0d381e;
+            border-radius: 2px;
+            box-shadow: -2px 1px 3px rgba(0,0,0,0.4);
+        }
+
+        .tile[data-suit="wan"] .tile-num, .tile[data-suit="wan"] .tile-char { color: #c0392b; }
+        .tile[data-suit="tong"] .tile-num, .tile[data-suit="tong"] .tile-char { color: #2980b9; }
+        .tile[data-suit="tiao"] .tile-num, .tile[data-suit="tiao"] .tile-char { color: #27ae60; }
+        .tile[data-suit="zhong"] .tile-num { color: #e74c3c; font-size: 26px; }
+
+        .tile.small { width: 22px; height: 30px; border-radius: 3px; }
+        .tile.small .tile-num { font-size: 11px; line-height: 1; }
+        .tile.small .tile-char { font-size: 9px; line-height: 1; }
+
+        .hand-tiles { display: flex; gap: 4px; align-items: flex-end; padding: 4px 8px; }
+
+        .area-south .hand-tiles .tile {
+            width: clamp(34px, 5vw, 54px);
+            height: clamp(52px, 7.5vw, 78px);
+            border-radius: 5px;
+            border-bottom: 5px solid #1e824c;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.6), inset 0 1px 2px rgba(255,255,255,0.9);
+        }
+
+        .area-south .hand-tiles .tile .tile-num {
+            font-size: clamp(18px, 2.5vw, 26px);
+            font-family: "Kaiti SC", "STKaiti", "楷体", serif;
+            font-weight: 900;
+            line-height: 1;
+        }
+        .area-south .hand-tiles .tile .tile-char {
+            font-size: clamp(11px, 1.5vw, 15px);
+            font-family: "Kaiti SC", "STKaiti", "楷体", serif;
+            font-weight: bold;
+            line-height: 1;
+            margin-top: 2px;
+        }
+
+        .area-south .hand-tiles .tile.selected {
+            transform: translateY(-20px);
+            border-color: var(--accent-gold);
+            box-shadow: 0 10px 18px rgba(0,0,0,0.6), 0 0 10px var(--accent-gold);
+        }
+
+        .drawn-tile-gap { margin-left: 16px !important; }
+        .side-drawn-tile-gap { margin-top: 10px !important; }
+
+        .action-bar {
+            position: absolute;
+            bottom: 145px;
+            right: 28px;
+            display: flex;
+            gap: 12px;
+            z-index: 35;
+        }
+
+        .action-btn {
+            width: 58px;
+            height: 58px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #f39c12, #d35400);
+            color: #fff;
+            font-weight: bold;
+            font-size: 15px;
+            border: 2px solid #fff;
+            box-shadow: 0 5px 14px rgba(0,0,0,0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .action-btn:active { transform: scale(0.92); }
+        .action-btn.pass { background: linear-gradient(135deg, #7f8c8d, #34495e); }
+        .action-btn.hu { background: linear-gradient(135deg, #e74c3c, #c0392b); font-size: 17px; animation: pulse 1s infinite alternate; }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            100% { transform: scale(1.08); }
+        }
+
+        .modal-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .modal-overlay.show { opacity: 1; pointer-events: auto; }
+
+        .modal-card {
+            background: #12261b;
+            border: 2px solid var(--accent-gold);
+            border-radius: 12px;
+            width: 92%;
+            max-width: 560px;
+            padding: 20px;
+            color: #fff;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .modal-header {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--accent-gold);
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.15);
+            padding-bottom: 8px;
+        }
+
+        .modal-body { font-size: 13px; line-height: 1.6; max-height: 420px; overflow-y: auto; }
+        .settle-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed rgba(255,255,255,0.1); }
+
+        .log-item {
+            background: rgba(0,0,0,0.3);
+            border-left: 3px solid var(--accent-gold);
+            padding: 8px 10px;
+            margin-bottom: 10px;
+            border-radius: 0 6px 6px 0;
+        }
+
+        @media (max-width: 768px) {
+            .mahjong-table { grid-template-rows: 85px 1fr 125px; grid-template-columns: 60px 1fr 60px; border-width: 6px; }
+            .action-bar { bottom: 110px; right: 12px; gap: 8px; }
+            .action-btn { width: 48px; height: 48px; font-size: 13px; }
+            .discards-north, .discards-south { max-width: 120px; }
+        }
+    .decision-table td,.decision-table th{vertical-align:top;}
+        </style>
+</head>
+<body>
+
+<div id="app">
+    <header class="header">
+        <div class="header-title">🀄 县城麻将 · AI智能对战</div>
+        <div class="controls-group">
+            <select id="modeSelect">
+                <option value="practice">练习模式 (点击AI头像看决策全过程)</option>
+                <option value="real">实战模式 (盲打)</option>
+            </select>
+            <button id="btnToggleAIHand" class="btn-gold" style="display:inline-block;">👁️ 隐藏AI手牌</button>
+            <label>底分:
+                <select id="stakeSelect">
+                    <option value="5">5元档</option>
+                    <option value="10">10元档</option>
+                    <option value="20">20元档</option>
+                </select>
+            </label>
+            <div>积分: <span id="scoreDisplay" style="color:var(--accent-gold); font-weight:bold;">0</span></div>
+            <button id="btnResetScore">重置积分</button>
+            <button id="btnSoundToggle">🔊 音效</button>
+            <button id="btnTestVoice" style="background:#1a5276;">🗣️ 测试语音</button>
+        </div>
+    </header>
+
+    <main class="mahjong-table">
+        <!-- 北 (Bot 2) -->
+        <div class="player-area area-north">
+            <div class="player-info" id="info-2">
+                <div class="avatar">北</div>
+                <div>
+                    <div>机器人2 (北) <span id="dealer-tag-2" class="dealer-badge" style="display:none;">庄</span></div>
+                    <div class="player-score">积分: <span id="score-2">0</span></div>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <div class="melds-container" id="melds-2"></div>
+                <div class="hand-tiles" id="hand-2" style="display:flex; gap:2px;"></div>
+            </div>
+        </div>
+
+        <!-- 西 (Bot 3) -->
+        <div class="player-area area-west">
+            <div class="player-info" id="info-3">
+                <div class="avatar">西</div>
+                <div>
+                    <div>机器人3 (西) <span id="dealer-tag-3" class="dealer-badge" style="display:none;">庄</span></div>
+                    <div class="player-score">积分: <span id="score-3">0</span></div>
+                </div>
+            </div>
+            <div class="melds-container side-melds" id="melds-3"></div>
+            <div class="side-tile-wall" id="hand-3" style="display:flex; flex-direction:column; gap:2px; max-height: 220px; flex-wrap: wrap;"></div>
+        </div>
+
+        <!-- 中央对局桌 -->
+        <div class="player-area area-center">
+            <div class="center-board">
+                <div class="turn-indicator" id="turnIndicator">准备开局</div>
+                <div class="action-announcement" id="actionAnnouncement"></div>
+                <div class="wall-counter">牌墙: <span id="wallCount">112</span></div>
+                
+                <div class="last-discard-banner" id="lastDiscardBanner" style="display: none; flex-direction: column; align-items: center; gap: 2px;">
+                    <span id="lastDiscardText" style="color:var(--accent-gold); font-size: 11px; font-weight:bold;">出牌:</span>
+                    <div id="lastDiscardTileSlot"></div>
+                </div>
+
+                <button class="btn-gold" id="btnStart" style="margin-top: 4px; padding: 4px 14px;">开始对局</button>
+            </div>
+
+            <div class="discards-grid discards-north" id="discards-2"></div>
+            <div class="discards-grid discards-west" id="discards-3"></div>
+            <div class="discards-grid discards-east" id="discards-1"></div>
+            <div class="discards-grid discards-south" id="discards-0"></div>
+        </div>
+
+        <!-- 东 (Bot 1) -->
+        <div class="player-area area-east">
+            <div class="player-info" id="info-1">
+                <div class="avatar">东</div>
+                <div>
+                    <div>机器人1 (东) <span id="dealer-tag-1" class="dealer-badge" style="display:none;">庄</span></div>
+                    <div class="player-score">积分: <span id="score-1">0</span></div>
+                </div>
+            </div>
+            <div class="melds-container side-melds" id="melds-1"></div>
+            <div class="side-tile-wall" id="hand-1" style="display:flex; flex-direction:column; gap:2px; max-height: 220px; flex-wrap: wrap;"></div>
+        </div>
+
+        <!-- 南 (人类玩家) -->
+        <div class="player-area area-south">
+            <div style="display:flex; align-items:flex-end; justify-content: center; width: 100%;">
+                <div class="melds-container" id="melds-0"></div>
+                <div class="hand-tiles" id="hand-0"></div>
+            </div>
+
+            <div class="player-info" id="info-0">
+                <div class="avatar" style="background:#e67e22;">我</div>
+                <div>
+                    <div>我自己 (南) <span id="dealer-tag-0" class="dealer-badge" style="display:none;">庄</span></div>
+                    <div class="player-score">积分: <span id="score-0">0</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="action-bar" id="actionBar" style="display:none;">
+            <button class="action-btn hu" id="btnHu" style="display:none;">胡</button>
+            <button class="action-btn" id="btnGang" style="display:none;">杠</button>
+            <button class="action-btn" id="btnPeng" style="display:none;">碰</button>
+            <button class="action-btn btn-gold" id="btnDiscard" style="display:none;">出牌</button>
+            <button class="action-btn pass" id="btnPass" style="display:none;">过</button>
+        </div>
+    </main>
+
+    <!-- 弹窗 -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-card">
+            <div class="modal-header" id="modalTitle">提示</div>
+            <div class="modal-body" id="modalBody"></div>
+            <div style="text-align: right; margin-top: 10px;">
+                <button class="btn-gold" id="modalBtnClose">确定</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const SUITS = { WAN: 'wan', TONG: 'tong', TIAO: 'tiao', ZHONG: 'zhong' };
+
+function parseTile(tileStr) {
+    if (!tileStr) return { suit: '', num: '', char: '' };
+    if (tileStr === 'zhong') return { suit: SUITS.ZHONG, num: '中', char: '' };
+    const num = parseInt(tileStr[0], 10);
+    const suit = tileStr.slice(1);
+    const charMap = { 'wan': '万', 'tong': '筒', 'tiao': '条' };
+    return { suit, num, char: charMap[suit] || '' };
+}
+
+function createDeck() {
+    const deck = [];
+    ['wan', 'tong', 'tiao'].forEach(s => {
+        for (let i = 1; i <= 9; i++) {
+            for (let k = 0; k < 4; k++) deck.push(`${i}${s}`);
+        }
+    });
+    for (let k = 0; k < 4; k++) deck.push('zhong');
+    for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+    return deck;
+}
+
+function sortTiles(tiles) {
+    const suitOrder = { 'wan': 1, 'tong': 2, 'tiao': 3, 'zhong': 4 };
+    return [...tiles].sort((a, b) => {
+        const ta = parseTile(a), tb = parseTile(b);
+        if (suitOrder[ta.suit] !== suitOrder[tb.suit]) return suitOrder[ta.suit] - suitOrder[tb.suit];
+        return (typeof ta.num === 'number' ? ta.num : 0) - (typeof tb.num === 'number' ? tb.num : 0);
+    });
+}
+
+class MahjongEvaluator {
+    static getCounts(tiles) {
+        const counts = {};
+        tiles.forEach(t => counts[t] = (counts[t] || 0) + 1);
+        return counts;
+    }
+
+    static canFormMelds(counts) {
+        // 关键修复：按花色+数值排序选“数值最小的未处理牌”，
+        // 保证它必然是某面子的起点（顺子起点或刻子）。
+        // 不能用 Object.keys 的插入顺序——checkStandardHuWithMelds 会把补杠牌
+        // append 到末尾破坏顺序，导致顺子中间牌被先处理而漏判（抢杠胡不触发的根因）。
+        const suitOrder = { 'wan': 1, 'tong': 2, 'tiao': 3, 'zhong': 4 };
+        const keys = Object.keys(counts).filter(t => counts[t] > 0)
+            .sort((a, b) => {
+                const ta = parseTile(a), tb = parseTile(b);
+                if (suitOrder[ta.suit] !== suitOrder[tb.suit]) return suitOrder[ta.suit] - suitOrder[tb.suit];
+                return (typeof ta.num === 'number' ? ta.num : 0) - (typeof tb.num === 'number' ? tb.num : 0);
+            });
+        const tile = keys[0];
+        if (!tile) return true;
+
+        if (counts[tile] >= 3) {
+            counts[tile] -= 3;
+            if (this.canFormMelds(counts)) {
+                counts[tile] += 3;
+                return true;
+            }
+            counts[tile] += 3;
+        }
+
+        const parsed = parseTile(tile);
+        if (parsed.suit !== SUITS.ZHONG && typeof parsed.num === 'number' && parsed.num <= 7) {
+            const tile2 = `${parsed.num + 1}${parsed.suit}`;
+            const tile3 = `${parsed.num + 2}${parsed.suit}`;
+
+            if ((counts[tile2] || 0) > 0 && (counts[tile3] || 0) > 0) {
+                counts[tile]--;
+                counts[tile2]--;
+                counts[tile3]--;
+
+                if (this.canFormMelds(counts)) {
+                    counts[tile]++;
+                    counts[tile2]++;
+                    counts[tile3]++;
+                    return true;
+                }
+
+                counts[tile]++;
+                counts[tile2]++;
+                counts[tile3]++;
+            }
+        }
+
+        return false;
+    }
+
+    static checkSevenPairs(hand) {
+        if (hand.length !== 14) return null;
+        const counts = this.getCounts(hand);
+        let pairs = 0, quads = 0;
+        for (const t in counts) {
+            if (counts[t] === 2) pairs++;
+            else if (counts[t] === 4) quads++;
+            else return null;
+        }
+        if (pairs + quads * 2 === 7) return { deluxe: quads };
+        return null;
+    }
+
+    static checkBigPairs(hand, melds) {
+        if (melds.some(m => m.type === 'angang' || m.type === 'zhigang' || m.type === 'minggang' || m.type === 'gang')) return false;
+        if ((hand.length + melds.length * 3) !== 14) return false;
+        const counts = this.getCounts(hand);
+        let pairCount = 0;
+        for (const t in counts) {
+            if (counts[t] === 2) pairCount++;
+            else if (counts[t] !== 3) return false;
+        }
+        return pairCount === 1;
+    }
+
+    static isFlush(hand, melds) {
+        const allTiles = [...hand];
+        melds.forEach(m => allTiles.push(...m.tiles));
+        if (allTiles.length === 0) return false;
+        const firstSuit = parseTile(allTiles[0]).suit;
+        if (firstSuit === SUITS.ZHONG) return false;
+        return allTiles.every(t => parseTile(t).suit === firstSuit);
+    }
+
+    static checkStandardHu(hand) {
+        if (hand.length % 3 !== 2) return false;
+        const counts = this.getCounts(hand);
+        const uniqueTiles = Object.keys(counts);
+
+        for (const pairTile of uniqueTiles) {
+            if (counts[pairTile] >= 2) {
+                const tempCounts = { ...counts };
+                tempCounts[pairTile] -= 2;
+                if (this.canFormMelds(tempCounts)) return true;
+            }
+        }
+        return false;
+    }
+
+    // 判断“带已有碰/杠”的标准胡。hand 只保存暗手牌；已有每组碰/杠按3张面子计入14张结构。
+    static checkStandardHuWithMelds(hand, melds = [], extraTile = null) {
+        const safeHand = Array.isArray(hand) ? hand : [];
+        const safeMelds = Array.isArray(melds) ? melds : [];
+        const fullHand = extraTile === null ? [...safeHand] : [...safeHand, extraTile];
+        const expectedConcealedCount = 14 - safeMelds.length * 3;
+        if (expectedConcealedCount < 2 || fullHand.length !== expectedConcealedCount) return false;
+        return this.checkStandardHu(fullHand);
+    }
+
+    // 统一判断某张牌加入后是否成立。
+    static canWinWithTile(hand, melds = [], tile, options = {}) {
+        const { isDealerFirstDiscard = false, isQiangGang = false } = options;
+        const safeHand = Array.isArray(hand) ? hand : [];
+        const safeMelds = Array.isArray(melds) ? melds : [];
+        const fullHand = [...safeHand, tile];
+
+        // 抢杠胡：只允许普通结构（清一色只是普通结构的额外计分），不能抢成七小对/大对子。
+        if (isQiangGang) {
+            return this.checkStandardHuWithMelds(safeHand, safeMelds, tile);
+        }
+
+        const isStd = this.checkStandardHuWithMelds(safeHand, safeMelds, tile);
+        const is7P = safeMelds.length === 0 && this.checkSevenPairs(fullHand);
+        const isBigP = this.checkBigPairs(fullHand, safeMelds);
+        const isFl = this.isFlush(fullHand, safeMelds);
+
+        if (isDealerFirstDiscard) {
+            return !!(isStd || is7P || isBigP || (isFl && (isStd || is7P || isBigP)));
+        }
+
+        return !!(is7P || isBigP || (isFl && (isStd || is7P || isBigP)));
+    }
+
+    static canSelfDrawHu(hand, melds = []) {
+        // 自摸时，当前手牌本身就是完整胡牌结构。
+        const isStd = this.checkStandardHuWithMelds(hand, melds);
+        const is7P = melds.length === 0 && this.checkSevenPairs(hand);
+        const isBigP = this.checkBigPairs(hand, melds);
+        return !!(isStd || is7P || isBigP);
+    }
+
+    static canDiscardHu(hand, melds, tile, isDealerFirstDiscard = false, isQiangGang = false) {
+        return this.canWinWithTile(hand, melds, tile, { isDealerFirstDiscard, isQiangGang });
+    }
+
+    static getTingInfo(hand, melds) {
+        const tingTiles = [];
+        const allPossible = [];
+        ['wan', 'tong', 'tiao'].forEach(s => {
+            for (let i = 1; i <= 9; i++) allPossible.push(`${i}${s}`);
+        });
+        allPossible.push('zhong');
+
+        for (const t of allPossible) {
+            // 听牌信息描述的是“摸到后能否自摸胡”，不受点炮/抢杠胡限制。
+            if (this.canSelfDrawHu([...hand, t], melds)) {
+                tingTiles.push(t);
+            }
+        }
+
+        return {
+            isTing: tingTiles.length > 0,
+            tingTiles
+        };
+    }
+}
+
+class RobotAI {
+    // 修正策略定位逻辑：结合刻子数与对子数，准确区别【大对子】与【七小对】
+    static analyzeHandDirection(hand, melds) {
+        const allTiles = [...hand];
+        melds.forEach(m => allTiles.push(...m.tiles));
+        
+        const suitCounts = { 'wan': 0, 'tong': 0, 'tiao': 0, 'zhong': 0 };
+        allTiles.forEach(t => suitCounts[parseTile(t).suit]++);
+
+        const maxSuit = Object.keys(suitCounts).reduce((a, b) => suitCounts[a] > suitCounts[b] ? a : b);
+        const maxSuitCount = suitCounts[maxSuit];
+        const flushRatio = maxSuitCount / allTiles.length;
+
+        const counts = MahjongEvaluator.getCounts(hand);
+        let pairCount = 0;
+        let tripletCount = 0;
+        for (const t in counts) {
+            if (counts[t] === 2) pairCount++;
+            if (counts[t] >= 3) tripletCount++;
+        }
+
+        // 刻子数加上碰掉的牌组
+        const totalTriplets = tripletCount + melds.length;
+
+        if (flushRatio >= 0.75 && maxSuit !== 'zhong') {
+            const suitName = { 'wan': '万字', 'tong': '筒字', 'tiao': '条字' }[maxSuit];
+            return {
+                type: 'FLUSH',
+                name: `清一色 (${suitName})`,
+                reason: `手牌中 ${suitName} 占了 ${Math.round(flushRatio * 100)}%，专注做清一色大牌！`
+            };
+        } 
+        // 优先判断大对子：拥有3组及以上刻子/碰牌，或者刻子+对子且已有碰牌
+        else if (totalTriplets >= 3 || (totalTriplets >= 2 && pairCount >= 1 && melds.length > 0)) {
+            return {
+                type: 'ALL_TRIPLETS',
+                name: '大对子 (碰碰胡)',
+                reason: `手牌已有 ${totalTriplets} 组刻子/碰牌，目标做大对子(碰碰胡)！`
+            };
+        } 
+        // 只有在门清（未碰杠）且对子数多（>=4对）时才判定为七小对
+        else if (pairCount >= 4 && melds.length === 0 && tripletCount === 0) {
+            return {
+                type: 'SEVEN_PAIRS',
+                name: '七小对',
+                reason: `门清手牌已有 ${pairCount} 个对子，且未碰/杠牌，全力冲刺七小对！`
+            };
+        } else {
+            return {
+                type: 'STANDARD',
+                name: '快速平胡听牌',
+                reason: `追求最快听牌和成牌效率，优先保留多面搭子与中张牌。`
+            };
+        }
+    }
+
+    static evaluateHandValue(tiles) {
+        const sorted = sortTiles(tiles);
+        return RobotAI.findMaxMeldScore(sorted, {});
+    }
+
+    static findMaxMeldScore(tiles, memo = {}) {
+        if (tiles.length === 0) return 0;
+        const key = tiles.join(',');
+        if (memo[key] !== undefined) return memo[key];
+
+        let maxScore = 0;
+        const first = tiles[0];
+        const countFirst = tiles.filter(t => t === first).length;
+
+        if (countFirst >= 3) {
+            const remaining = [...tiles];
+            remaining.splice(remaining.indexOf(first), 1);
+            remaining.splice(remaining.indexOf(first), 1);
+            remaining.splice(remaining.indexOf(first), 1);
+            maxScore = Math.max(maxScore, 100 + RobotAI.findMaxMeldScore(remaining, memo));
+        }
+
+        const p = parseTile(first);
+        if (p.suit !== SUITS.ZHONG && typeof p.num === 'number' && p.num <= 7) {
+            const n2 = `${p.num + 1}${p.suit}`;
+            const n3 = `${p.num + 2}${p.suit}`;
+            if (tiles.includes(n2) && tiles.includes(n3)) {
+                const remaining = [...tiles];
+                remaining.splice(remaining.indexOf(first), 1);
+                remaining.splice(remaining.indexOf(n2), 1);
+                remaining.splice(remaining.indexOf(n3), 1);
+                maxScore = Math.max(maxScore, 100 + RobotAI.findMaxMeldScore(remaining, memo));
+            }
+        }
+
+        if (countFirst >= 2) {
+            const remaining = [...tiles];
+            remaining.splice(remaining.indexOf(first), 1);
+            remaining.splice(remaining.indexOf(first), 1);
+            maxScore = Math.max(maxScore, 35 + RobotAI.findMaxMeldScore(remaining, memo));
+        }
+
+        if (p.suit !== SUITS.ZHONG && typeof p.num === 'number') {
+            if (p.num <= 8) {
+                const n2 = `${p.num + 1}${p.suit}`;
+                if (tiles.includes(n2)) {
+                    const remaining = [...tiles];
+                    remaining.splice(remaining.indexOf(first), 1);
+                    remaining.splice(remaining.indexOf(n2), 1);
+                    const tatsuVal = (p.num >= 2 && p.num <= 7) ? 18 : 12;
+                    maxScore = Math.max(maxScore, tatsuVal + RobotAI.findMaxMeldScore(remaining, memo));
+                }
+            }
+            if (p.num <= 7) {
+                const n3 = `${p.num + 2}${p.suit}`;
+                if (tiles.includes(n3)) {
+                    const remaining = [...tiles];
+                    remaining.splice(remaining.indexOf(first), 1);
+                    remaining.splice(remaining.indexOf(n3), 1);
+                    maxScore = Math.max(maxScore, 10 + RobotAI.findMaxMeldScore(remaining, memo));
+                }
+            }
+        }
+
+        const remaining = [...tiles];
+        remaining.shift();
+        let isoVal = 0;
+        if (p.suit === SUITS.ZHONG) {
+            isoVal = 0;
+        } else {
+            isoVal = (p.num >= 3 && p.num <= 7) ? 4 : 2;
+        }
+        maxScore = Math.max(maxScore, isoVal + RobotAI.findMaxMeldScore(remaining, memo));
+
+        memo[key] = maxScore;
+        return maxScore;
+    }
+
+    static evaluatePengDecision(aiPlayer, tile) {
+        const hand = aiPlayer.hand;
+        const targetStrategy = RobotAI.analyzeHandDirection(hand, aiPlayer.melds);
+        const parsed = parseTile(tile);
+        const tileName = parsed.suit === SUITS.ZHONG ? '红中' : `${parsed.num}${parsed.char}`;
+
+        if (targetStrategy.type === 'SEVEN_PAIRS') {
+            return {
+                shouldPeng: false,
+                reason: `放弃碰 [${tileName}]：当前策略为【七小对】，碰牌会破坏门清！`,
+                detailHtml: `<div class="log-item">
+                               <p style="color:#f39c12; font-weight:bold;">⚡ 碰牌响应评估：过碰 [${tileName}]</p>
+                               <p>手牌定性为【七小对】，碰牌倒牌后将彻底无法达成七小对，故坚决放弃碰牌。</p>
+                             </div>`
+            };
+        }
+
+        let pCount = 0;
+        const tempHand = hand.filter(t => {
+            if (t === tile && pCount < 2) { pCount++; return false; }
+            return true;
+        });
+
+        const valBefore = RobotAI.evaluateHandValue(hand);
+        const valAfter = RobotAI.evaluateHandValue(tempHand);
+        const netGain = (valAfter + 100) - valBefore;
+
+        if (netGain >= 20 || targetStrategy.type === 'ALL_TRIPLETS') {
+            return {
+                shouldPeng: true,
+                reason: `碰 [${tileName}]：碰牌后形成刻子，大幅提升进张速度！`,
+                detailHtml: `<div class="log-item">
+                               <p style="color:#2ecc71; font-weight:bold;">⚡ 碰牌响应评估：决定碰 [${tileName}]</p>
+                               <p>手牌已有一对 [${tileName}]，碰牌可锁定刻子，加速成型。</p>
+                             </div>`
+            };
+        } else {
+            return {
+                shouldPeng: false,
+                reason: `放弃碰 [${tileName}]：碰牌后手牌搭子断层，故放弃。`,
+                detailHtml: `<div class="log-item">
+                               <p style="color:#bdc3c7; font-weight:bold;">⚡ 碰牌响应评估：过碰 [${tileName}]</p>
+                               <p>评估发现碰出 [${tileName}] 会导致手牌搭子断层，故选择保留对子自己摸牌。</p>
+                             </div>`
+            };
+        }
+    }
+
+    static tileName(tile) {
+        const p = parseTile(tile);
+        return p.suit === SUITS.ZHONG ? '红中' : `${p.num}${p.char}`;
+    }
+
+    // 找出一张牌在当前手牌里实际依附的对子/搭子/刻子。
+    // 这部分只用于“解释”，不参与AI最终评分，避免把内部评分伪装成牌理。
+    static getTileConnections(hand, tile) {
+        const p = parseTile(tile);
+        const counts = MahjongEvaluator.getCounts(hand);
+        const result = [];
+        const seen = new Set();
+        const add = (text) => { if (text && !seen.has(text)) { seen.add(text); result.push(text); } };
+
+        if ((counts[tile] || 0) >= 2) {
+            add(`有${counts[tile] === 2 ? '一对' : '同牌组合'}${this.tileName(tile)}`);
+        }
+        if ((counts[tile] || 0) >= 3) add(`已经形成${this.tileName(tile)}刻子`);
+
+        if (p.suit !== SUITS.ZHONG && typeof p.num === 'number') {
+            const s = p.suit;
+            const n = p.num;
+            const exists = (x) => x >= 1 && x <= 9 && (counts[`${x}${s}`] || 0) > 0;
+            if (exists(n - 1)) add(`参与${n - 1}${p.char}${n}${p.char}搭子`);
+            if (exists(n + 1)) add(`参与${n}${p.char}${n + 1}${p.char}搭子`);
+            if (exists(n - 2)) add(`参与${n - 2}${p.char}${n}${p.char}嵌张搭子`);
+            if (exists(n + 2)) add(`参与${n}${p.char}${n + 2}${p.char}嵌张搭子`);
+        }
+        return result;
+    }
+
+    // 一张牌被打掉以后，下一次摸到哪些牌会直接形成新的对子/搭子/面子。
+    // 这里统计“牌种类”而不是剩余张数，正对应用户想看的“未来摸牌路数”。
+    static getUsefulDraws(hand, melds = []) {
+        const allPossible = [];
+        ['wan', 'tong', 'tiao'].forEach(s => {
+            for (let i = 1; i <= 9; i++) allPossible.push(`${i}${s}`);
+        });
+        allPossible.push('zhong');
+
+        const counts = MahjongEvaluator.getCounts(hand);
+        const useful = [];
+        const winning = [];
+        const meld = [];
+        const tatsu = [];
+        const pair = [];
+
+        const hasSequence = (tiles) => {
+            const c = new Set(tiles);
+            for (const t of c) {
+                const p = parseTile(t);
+                if (p.suit !== SUITS.ZHONG && typeof p.num === 'number' && c.has(`${p.num + 1}${p.suit}`) && c.has(`${p.num + 2}${p.suit}`)) return true;
+            }
+            return false;
+        };
+
+        for (const t of allPossible) {
+            const beforeCounts = MahjongEvaluator.getCounts(hand);
+            const after = [...hand, t];
+            const afterCounts = MahjongEvaluator.getCounts(after);
+            const gainedPair = (afterCounts[t] >= 2) && (beforeCounts[t] < 2);
+            const gainedTriplet = (afterCounts[t] >= 3) && (beforeCounts[t] < 3);
+
+            const p = parseTile(t);
+            let gainedSequence = false;
+            let gainedTatsu = false;
+            if (p.suit !== SUITS.ZHONG && typeof p.num === 'number') {
+                const s = p.suit, n = p.num;
+                const exists = (x) => x >= 1 && x <= 9 && (beforeCounts[`${x}${s}`] || 0) > 0;
+                // 这张新摸到的牌必须亲自参与形成顺子，否则不能把别处已有的顺子算到它头上。
+                gainedSequence = (exists(n - 1) && exists(n - 2)) || (exists(n - 1) && exists(n + 1)) || (exists(n + 1) && exists(n + 2));
+                // 两张搭子：12/23这类相邻搭子，或13这类嵌张搭子。
+                gainedTatsu = exists(n - 1) || exists(n + 1) || exists(n - 2) || exists(n + 2);
+            }
+
+            if (MahjongEvaluator.canSelfDrawHu(after, melds)) winning.push(t);
+            if (gainedTriplet || (gainedSequence && after.length <= 14)) meld.push(t);
+            else if (gainedTatsu) tatsu.push(t);
+            else if (gainedPair) pair.push(t);
+
+            if (gainedTriplet || gainedSequence || gainedTatsu || gainedPair || winning.includes(t)) useful.push(t);
+        }
+
+        return { useful, winning, meld, tatsu, pair };
+    }
+
+    static namesForTiles(tiles) {
+        return tiles.map(t => this.tileName(t));
+    }
+
+    static formatDrawList(tiles, max = 8) {
+        const names = this.namesForTiles(tiles);
+        if (names.length <= max) return names.join('、') || '无';
+        return `${names.slice(0, max).join('、')}等${names.length}种`;
+    }
+
+    // 生成面向玩家的牌理解释：先比较留下的结构和进张，再给出推荐分。
+    static buildDiscardComparison(hand, melds, bestChoice, runnerUp) {
+        const bestHand = [...hand];
+        bestHand.splice(bestHand.indexOf(bestChoice.tile), 1);
+        const runnerHand = [...hand];
+        runnerHand.splice(runnerHand.indexOf(runnerUp.tile), 1);
+
+        const bestDraws = this.getUsefulDraws(bestHand, melds);
+        const runnerDraws = this.getUsefulDraws(runnerHand, melds);
+        const bestConnections = this.getTileConnections(hand, bestChoice.tile);
+        const runnerConnections = this.getTileConnections(hand, runnerUp.tile);
+        const bestName = bestChoice.tileName;
+        const runnerName = runnerUp.tileName;
+
+        let html = `<p style="color:#f39c12; font-weight:bold; margin-top:8px; margin-bottom:4px;">🔎 为什么打出 [${bestName}] 比打出 [${runnerName}] 更好？</p>`;
+
+        if (bestConnections.length) {
+            html += `<p>• [${bestName}] 当前的牌面关系：<b>${bestConnections.slice(0, 3).join('；')}</b>。打掉它后，上述组合中被拆掉的部分较少，主要保留下来的结构是 <b>${this.describeRemainingStructures(bestHand)}</b>。</p>`;
+        } else {
+            html += `<p>• [${bestName}] 当前没有形成对子、刻子或明显搭子，属于可以独立处理的牌，打掉不会拆开关键结构。</p>`;
+        }
+
+        if (runnerConnections.length) {
+            html += `<p>• 相比之下，[${runnerName}] 当前是 <b>${runnerConnections.slice(0, 3).join('；')}</b>；打掉它会直接拆开这组联系，留下 <b>${this.describeRemainingStructures(runnerHand)}</b>。</p>`;
+        } else {
+            html += `<p>• [${runnerName}] 本身也没有明显组合，因此两者的差异主要看打掉后留下的搭子和后续摸牌路线。</p>`;
+        }
+
+        html += `<p>• 打出 [${bestName}] 后，能直接改善现有组合的牌包括 <b>${this.formatDrawList(bestDraws.useful, 8)}</b>，共 <b>${bestDraws.useful.length} 种牌</b>；其中可直接成胡的有 <b>${bestDraws.winning.length} 种</b>。</p>`;
+        html += `<p>• 打出 [${runnerName}] 后，对应的改善牌包括 <b>${this.formatDrawList(runnerDraws.useful, 8)}</b>，共 <b>${runnerDraws.useful.length} 种牌</b>；其中可直接成胡的有 <b>${runnerDraws.winning.length} 种</b>。</p>`;
+
+        const delta = bestDraws.useful.length - runnerDraws.useful.length;
+        if (delta > 0) {
+            html += `<p>• 所以从牌面看，打 [${bestName}] 比打 [${runnerName}] 多保留 <b>${delta} 种</b>直接改善的摸牌路线，未来摸牌的选择更宽。</p>`;
+        } else if (delta < 0) {
+            html += `<p>• 注意：打 [${bestName}] 的直接改善牌反而少 <b>${Math.abs(delta)} 种</b>，所以这次并不是“进张更多就一定更好”；真正的优势在于它没有像 [${runnerName}] 那样拆掉关键搭子。</p>`;
+        } else {
+            html += `<p>• 两种打法的直接改善牌数量相同，因此真正的区别在于：打 [${bestName}] 对现有搭子的破坏更小，保留下来的结构更完整。</p>`;
+        }
+
+        // 推荐分只作为排序结果展示，不再拿它作为牌理解释。
+        const scoreDelta = bestChoice.totalEvalScore - runnerUp.totalEvalScore;
+        html += `<p style="color:#999;font-size:11px;">📊 算法排序：打 [${bestName}] 的内部推荐分 ${bestChoice.totalEvalScore}，打 [${runnerName}] 为 ${runnerUp.totalEvalScore}，相差 ${scoreDelta >= 0 ? '+' : ''}${scoreDelta}。这个分数只是AI内部排序指标，不等于麻将番数。</p>`;
+        return html;
+    }
+
+    static describeRemainingStructures(hand) {
+        const counts = MahjongEvaluator.getCounts(hand);
+        const parts = [];
+        const used = new Set();
+        for (const t of sortTiles(hand)) {
+            if (used.has(t)) continue;
+            const p = parseTile(t);
+            const c = counts[t] || 0;
+            if (c >= 3) {
+                parts.push(`${this.tileName(t)}刻子`);
+                used.add(t);
+                continue;
+            }
+            if (c === 2) {
+                parts.push(`${this.tileName(t)}对子`);
+                used.add(t);
+                continue;
+            }
+            if (p.suit !== SUITS.ZHONG && typeof p.num === 'number') {
+                const t2 = `${p.num + 1}${p.suit}`;
+                const t3 = `${p.num + 2}${p.suit}`;
+                if (p.num <= 7 && counts[t2] && counts[t3]) {
+                    parts.push(`${this.tileName(t)}${this.tileName(t2)}${this.tileName(t3)}顺子`);
+                    used.add(t); used.add(t2); used.add(t3);
+                    continue;
+                }
+                if (p.num <= 8 && counts[t2]) {
+                    parts.push(`${this.tileName(t)}${this.tileName(t2)}搭子`);
+                    used.add(t); used.add(t2);
+                    continue;
+                }
+                if (p.num <= 7 && counts[t3]) {
+                    parts.push(`${this.tileName(t)}${this.tileName(t3)}嵌张搭子`);
+                    used.add(t); used.add(t3);
+                    continue;
+                }
+            }
+        }
+        return parts.slice(0, 4).join('、') || '零散孤张';
+    }
+
+    static makeDecision(game, aiIdx, forceDiscard = false) {
+        const p = game.players[aiIdx];
+        const hand = p.hand;
+        const targetStrategy = RobotAI.analyzeHandDirection(hand, p.melds);
+        const tingInfo = MahjongEvaluator.getTingInfo(hand, p.melds);
+
+        if (!forceDiscard && !p.justPenged) {
+            if (MahjongEvaluator.canSelfDrawHu(hand, p.melds)) {
+                return { 
+                    action: 'HU', 
+                    reason: '符合胡牌牌型，选择胡牌！', 
+                    detailHtml: `<div class="log-item"><p style="color:#e74c3c; font-weight:bold;">🏆 决策：自摸胡牌！</p></div>` 
+                };
+            }
+
+            const counts = MahjongEvaluator.getCounts(hand);
+            
+            for (const t in counts) {
+                if (counts[t] === 4) {
+                    const parsed = parseTile(t);
+                    const tileName = parsed.suit === SUITS.ZHONG ? '红中' : `${parsed.num}${parsed.char}`;
+                    return { 
+                        action: 'GANG', 
+                        gangType: 'angang', 
+                        tile: t, 
+                        reason: `手牌有四张 [${tileName}]，选择暗杠！`,
+                        detailHtml: `<div class="log-item"><p style="color:#2ecc71; font-weight:bold;">💥 决策：执行暗杠 [${tileName}]</p></div>`
+                    };
+                }
+            }
+
+            for (const t in counts) {
+                if (p.melds.some(m => m.type === 'peng' && m.tiles[0] === t)) {
+                    const parsed = parseTile(t);
+                    const tileName = parsed.suit === SUITS.ZHONG ? '红中' : `${parsed.num}${parsed.char}`;
+                    return { 
+                        action: 'GANG', 
+                        gangType: 'bugang', 
+                        tile: t, 
+                        reason: `摸到 [${tileName}]，选择补杠！`,
+                        detailHtml: `<div class="log-item"><p style="color:#2ecc71; font-weight:bold;">💥 决策：执行补杠 [${tileName}]</p></div>`
+                    };
+                }
+            }
+        }
+
+        const uniqueTiles = [...new Set(hand)];
+        const counts = MahjongEvaluator.getCounts(hand);
+        const evalList = [];
+
+        for (const t of uniqueTiles) {
+            const tempHand = [...hand];
+            tempHand.splice(tempHand.indexOf(t), 1);
+            
+            const remainingMeldScore = RobotAI.evaluateHandValue(tempHand);
+            const nextTing = MahjongEvaluator.getTingInfo(tempHand, p.melds);
+            const effectiveTileCount = nextTing.tingTiles.length;
+            const parsed = parseTile(t);
+            const tileName = parsed.suit === SUITS.ZHONG ? '红中' : `${parsed.num}${parsed.char}`;
+            
+            let discardWeight = 0;
+            let tileCategory = "";
+            let whyCutReason = ""; 
+
+            if (parsed.suit === SUITS.ZHONG) {
+                discardWeight = 35; 
+                tileCategory = "红中孤张";
+                whyCutReason = "字牌红中无法与数牌组顺子，单张留着没有任何靠张价值，最优先切出。";
+            } else {
+                const n = parsed.num;
+                const s = parsed.suit;
+                const hasN1 = hand.includes(`${n-1}${s}`);
+                const hasP1 = hand.includes(`${n+1}${s}`);
+                const hasN2 = hand.includes(`${n-2}${s}`);
+                const hasP2 = hand.includes(`${n+2}${s}`);
+                const isIsolated = !hasN1 && !hasP1 && !hasN2 && !hasP2;
+
+                if (counts[t] === 1) {
+                    if (isIsolated) {
+                        if (n === 1 || n === 9) {
+                            discardWeight = 25; 
+                            tileCategory = "1/9边张孤张";
+                            whyCutReason = `[${tileName}] 属于1/9极端边张孤牌，无邻牌联络，摸进靠张概率极低，打掉完全不伤手牌结构。`;
+                        } else if (n === 2 || n === 8) {
+                            discardWeight = 18; 
+                            tileCategory = "2/8次边孤张";
+                            whyCutReason = `[${tileName}] 属于2/8次边孤牌，靠张效率明显低于中张，优先打出。`;
+                        } else {
+                            discardWeight = 8; 
+                            tileCategory = "3~7中张孤牌";
+                            whyCutReason = `[${tileName}] 是无相邻搭子的孤立中张，因没有更高优先级的字牌/边张，故切出。`;
+                        }
+                    } else {
+                        discardWeight = 2; 
+                        tileCategory = "搭子/联络牌";
+                        whyCutReason = `[${tileName}] 与邻牌构成了搭子，打出会略微损伤进张组合。`;
+                    }
+                } else if (counts[t] === 2) {
+                    discardWeight = -25; 
+                    tileCategory = "对子牌 (雀头/碰牌)";
+                    whyCutReason = `[${tileName}] 属于重要对子，切掉会损失雀头或碰牌机会。`;
+                } else {
+                    discardWeight = -60; 
+                    tileCategory = "成型刻子";
+                    whyCutReason = `[${tileName}] 已三张成刻，属于核心固定牌型，极不建议打出。`;
+                }
+            }
+
+            const totalEvalScore = remainingMeldScore * 10 + discardWeight;
+
+            evalList.push({
+                tile: t,
+                tileName,
+                count: counts[t],
+                remainingMeldScore,
+                effectiveTileCount,
+                discardWeight,
+                totalEvalScore,
+                tileCategory,
+                whyCutReason
+            });
+        }
+
+        evalList.sort((a, b) => b.totalEvalScore - a.totalEvalScore);
+        const bestChoice = evalList[0];
+
+        // 构造易懂、逻辑自洽的思考日志 HTML
+        let detailHtml = `<div class="log-item">`;
+        detailHtml += `<p style="color:var(--accent-gold); font-weight:bold; font-size:14px;">🎯 战术定位：${targetStrategy.name}</p>`;
+        detailHtml += `<p style="font-size:12px; color:#bbb; margin-bottom:6px;">💡 定位分析：${targetStrategy.reason}</p>`;
+        
+        if (tingInfo.isTing) {
+            const tingNames = tingInfo.tingTiles.map(t => {
+                const tp = parseTile(t);
+                return tp.suit === SUITS.ZHONG ? '红中' : `${tp.num}${tp.char}`;
+            }).join('、');
+            detailHtml += `<p style="color:#2ecc71; font-weight:bold; font-size:13px; margin-bottom:6px;">⚡ 已听牌！叫牌：[ ${tingNames} ]</p>`;
+        }
+
+        detailHtml += `<p style="margin-bottom:6px; font-weight:bold;">🤖 出牌决定：打出 <span style="color:var(--accent-gold); font-size:15px;">[${bestChoice.tileName}]</span> (${bestChoice.tileCategory})</p>`;
+        
+        detailHtml += `<div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:6px; margin-bottom:8px;">`;
+        detailHtml += `<p style="color:#e74c3c; font-weight:bold; margin-bottom:4px;">❓ 为什么优先选择打出 [${bestChoice.tileName}]？</p>`;
+        detailHtml += `<p style="color:#eee; font-size:12px;">• ${bestChoice.whyCutReason}</p>`;
+        
+        if (evalList.length > 1) {
+            const runnerUp = evalList[1];
+            detailHtml += this.buildDiscardComparison(hand, p.melds, bestChoice, runnerUp);
+        }
+        detailHtml += `</div>`;
+
+        detailHtml += `<p style="margin-bottom:4px; color:#bdc3c7; font-size:12px;"><b>📋 主要候选牌对比：</b> <span style="color:#888;">推荐分用于排序，牌面依据用于解释为什么。</span></p>`;
+        detailHtml += `<table class="decision-table" style="width:100%; border-collapse:collapse; font-size:11px; text-align:center;">`;
+        detailHtml += `<tr style="background:rgba(255,255,255,0.1); color:var(--accent-gold);">
+                        <th style="padding:3px;">候选牌</th>
+                        <th style="padding:3px;">推荐分</th>
+                        <th style="padding:3px;">牌面依据</th>
+                        <th style="padding:3px;">打后有效进张</th>
+                       </tr>`;
+        
+        evalList.forEach((item, idx) => {
+            if (idx < 5) {
+                const isSelected = idx === 0;
+                const rowBg = isSelected ? 'background:rgba(241,196,15,0.25); font-weight:bold;' : '';
+                detailHtml += `<tr style="${rowBg} border-bottom:1px dashed rgba(255,255,255,0.1);">
+                                <td style="padding:3px; color:${isSelected ? '#2ecc71' : '#fff'};">[${item.tileName}] ${isSelected ? '✅' : ''}</td>
+                                <td class="score" style="padding:3px; color:var(--accent-gold);">${item.totalEvalScore}</td>
+                                <td style="padding:3px; text-align:left;">${this.getTileConnections(hand, item.tile).slice(0, 3).join('；') || '孤张/无明显组合'}</td>
+                                <td style="padding:3px; color:#2ecc71; font-size:11px;">${this.formatDrawList(this.getUsefulDraws((() => { const h=[...hand]; h.splice(h.indexOf(item.tile),1); return h; })(), p.melds).useful, 5)}</td>
+                               </tr>`;
+            }
+        });
+        detailHtml += `</table>`;
+        detailHtml += `</div>`;
+
+        return { 
+            action: 'DISCARD', 
+            tile: bestChoice.tile, 
+            reason: `打出 ${bestChoice.tileCategory} [${bestChoice.tileName}]`,
+            detailHtml
+        };
+    }
+}
+
+class SoundSystem {
+    constructor() {
+        this.enabled = true;
+        this.ctx = null;
+        this.voice = null;
+        this.initVoices();
+    }
+
+    initVoices() {
+        if ('speechSynthesis' in window) {
+            const loadVoices = () => {
+                const voices = window.speechSynthesis.getVoices();
+                if (voices && voices.length > 0) {
+                    this.voice = voices.find(v => v.lang && (
+                        v.lang.includes('zh') || 
+                        v.lang.includes('CN') || 
+                        v.lang.includes('cmn') ||
+                        v.lang.toLowerCase().includes('chinese')
+                    )) || voices[0] || null;
+                }
+            };
+            loadVoices();
+            if (window.speechSynthesis.onvoiceschanged !== undefined) {
+                window.speechSynthesis.onvoiceschanged = loadVoices;
+            }
+        }
+    }
+
+    init() {
+        if (!this.ctx) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (AudioCtx) this.ctx = new AudioCtx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+        if ('speechSynthesis' in window) window.speechSynthesis.resume();
+    }
+
+    playTone(freq, duration, type = 'sine', gainVal = 0.1) {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(this.ctx.currentTime + duration);
+        } catch(e) {}
+    }
+
+    playDraw() { this.playTone(440, 0.08, 'triangle', 0.15); }
+    playDiscard(tileStr) { 
+        this.playTone(220, 0.12, 'square', 0.12);
+        this.speakTile(tileStr);
+    }
+    playPeng() { 
+        this.playTone(587.33, 0.2, 'sine', 0.2); 
+        this.speakPhrase("碰");
+    }
+    
+    playGang(gangType = 'zhigang') { 
+        this.playTone(659.25, 0.25, 'sine', 0.25); 
+        if (gangType === 'angang') {
+            this.speakPhrase("暗杠");
+        } else if (gangType === 'bugang') {
+            this.speakPhrase("补杠");
+        } else {
+            this.speakPhrase("直杠");
+        }
+    }
+
+    playHu(handTypeName = "胡牌啦") {
+        this.playTone(523.25, 0.15, 'triangle', 0.3);
+        setTimeout(() => this.playTone(659.25, 0.15, 'triangle', 0.3), 150);
+        setTimeout(() => this.playTone(783.99, 0.3, 'triangle', 0.4), 300);
+        this.speakPhrase(handTypeName);
+    }
+
+    speakPhrase(phrase) {
+        if (!this.enabled || !phrase) return;
+        this.init();
+        if ('speechSynthesis' in window) {
+            try {
+                window.speechSynthesis.resume();
+                const utterance = new SpeechSynthesisUtterance(phrase);
+                utterance.lang = 'zh-CN';
+                utterance.rate = 1.15;
+                utterance.pitch = 1.0;
+                utterance.volume = 1.0;
+                
+                if (!this.voice) {
+                    const voices = window.speechSynthesis.getVoices();
+                    this.voice = voices.find(v => v.lang && (v.lang.includes('zh') || v.lang.includes('CN') || v.lang.includes('cmn'))) || voices[0] || null;
+                }
+                if (this.voice) utterance.voice = this.voice;
+                
+                window.speechSynthesis.speak(utterance);
+            } catch (e) {
+                console.warn("Speech synthesis notice:", e);
+            }
+        }
+    }
+
+    speakTile(tileStr) {
+        if (!this.enabled || !tileStr) return;
+        const t = parseTile(tileStr);
+        let text = "";
+        if (t.suit === SUITS.ZHONG) text = "红中";
+        else {
+            const suitMap = { 'wan': '万', 'tong': '筒', 'tiao': '条' };
+            text = `${t.num}${suitMap[t.suit] || ''}`;
+        }
+        this.speakPhrase(text);
+    }
+}
+const sound = new SoundSystem();
+
+class MahjongGame {
+    constructor() {
+        this.stake = 5;
+        this.score = 0;
+        this.players = [
+            { name: '我自己 (南)', score: 0, hand: [], melds: [], discards: [], justPenged: false, decisionLogs: [] },
+            { name: '机器人1 (东)', score: 0, hand: [], melds: [], discards: [], justPenged: false, decisionLogs: [] },
+            { name: '机器人2 (北)', score: 0, hand: [], melds: [], discards: [], justPenged: false, decisionLogs: [] },
+            { name: '机器人3 (西)', score: 0, hand: [], melds: [], discards: [], justPenged: false, decisionLogs: [] }
+        ];
+        this.dealer = 0;
+        this.turn = 0;
+        this.deck = [];
+        this.gameState = 'IDLE';
+        this.mode = 'practice';
+        this.showAITiles = true;
+        this.selectedTileIndex = -1;
+        this.lastDiscard = null;
+        this.lastDiscarder = -1;
+        this.currentRoundGangs = [];
+        this.isFirstDiscard = false;
+        this.pendingQiangGang = null;
+        this.loadStorage();
+    }
+
+    loadStorage() {
+        try {
+            const saved = localStorage.getItem('mahjong_scores_v3');
+            if (saved !== null) {
+                const scores = JSON.parse(saved);
+                if (Array.isArray(scores) && scores.length === 4) {
+                    this.players.forEach((p, i) => p.score = scores[i] || 0);
+                    this.score = this.players[0].score;
+                }
+            }
+        } catch(e) {}
+    }
+
+    saveStorage() {
+        try {
+            const scores = this.players.map(p => p.score);
+            localStorage.setItem('mahjong_scores_v3', JSON.stringify(scores));
+        } catch(e) {}
+    }
+
+    resetScore() {
+        this.players.forEach(p => p.score = 0);
+        this.score = 0;
+        localStorage.removeItem('mahjong_scores_v3');
+        this.saveStorage();
+        this.updateUI();
+    }
+
+    announceAction(text) {
+        const el = document.getElementById('actionAnnouncement');
+        if (!el) return;
+        el.innerText = text;
+        el.style.display = 'block';
+        clearTimeout(this.announceTimer);
+        this.announceTimer = setTimeout(() => {
+            el.style.display = 'none';
+        }, 5000);
+    }
+
+    startNewGame() {
+        sound.init();
+        this.deck = createDeck();
+        this.gameState = 'PLAYING';
+        this.selectedTileIndex = -1;
+        this.lastDiscard = null;
+        this.lastDiscarder = -1;
+        this.currentRoundGangs = [];
+        this.isFirstDiscard = true;
+        this.pendingQiangGang = null;
+        
+        document.getElementById('lastDiscardBanner').style.display = 'none';
+        document.getElementById('actionAnnouncement').style.display = 'none';
+        document.getElementById('actionBar').style.display = 'none';
+
+        this.players.forEach(p => {
+            p.hand = [];
+            p.melds = [];
+            p.discards = [];
+            p.justPenged = false;
+            p.decisionLogs = []; // 清空决策日志，重新记录
+        });
+
+        for (let i = 0; i < 13; i++) {
+            for (let p = 0; p < 4; p++) {
+                this.players[p].hand.push(this.deck.pop());
+            }
+        }
+        this.players.forEach(p => p.hand = sortTiles(p.hand));
+
+        this.players[this.dealer].hand.push(this.deck.pop());
+
+        this.turn = this.dealer;
+        sound.playDraw();
+        this.updateUI();
+
+        if (this.turn !== 0) {
+            const aiHand = this.players[this.dealer].hand;
+            const canTianHu = MahjongEvaluator.canSelfDrawHu(aiHand, []);
+            if (canTianHu) {
+                setTimeout(() => {
+                    this.handleWin([this.dealer], -1, null, true, 'TIAN_HU');
+                }, 800);
+                return;
+            }
+            this.processAITurn(800);
+        } else {
+            this.checkHumanTurnOptions();
+        }
+    }
+
+    checkHumanTurnOptions() {
+        if (this.gameState !== 'PLAYING') return;
+
+        const human = this.players[0];
+        const actionBar = document.getElementById('actionBar');
+        const btnHu = document.getElementById('btnHu');
+        const btnGang = document.getElementById('btnGang');
+        const btnPeng = document.getElementById('btnPeng');
+        const btnDiscard = document.getElementById('btnDiscard');
+        const btnPass = document.getElementById('btnPass');
+
+        btnHu.innerText = "胡";
+        btnHu.style.display = 'none';
+        btnGang.style.display = 'none';
+        btnPeng.style.display = 'none';
+        btnDiscard.style.display = 'none';
+        btnPass.style.display = 'none';
+
+        if (this.turn === 0) {
+            const isTianHu = (this.dealer === 0 && human.discards.length === 0 && this.isFirstDiscard);
+            const canHu = MahjongEvaluator.canSelfDrawHu(human.hand, human.melds);
+            
+            if (canHu) {
+                btnHu.innerText = isTianHu ? "天胡" : "胡";
+                btnHu.style.display = 'flex';
+            }
+
+            if (!human.justPenged) {
+                const counts = MahjongEvaluator.getCounts(human.hand);
+                let canGang = false;
+                for (const t in counts) {
+                    if (counts[t] === 4) { canGang = true; break; }
+                }
+                if (!canGang) {
+                    for (const t in counts) {
+                        if (human.melds.some(m => m.type === 'peng' && m.tiles[0] === t)) {
+                            canGang = true;
+                            break;
+                        }
+                    }
+                }
+                if (canGang) btnGang.style.display = 'flex';
+            }
+
+            if (this.selectedTileIndex >= 0) {
+                btnDiscard.style.display = 'flex';
+            }
+
+            if (canHu || btnGang.style.display === 'flex' || this.selectedTileIndex >= 0) {
+                actionBar.style.display = 'flex';
+            } else {
+                actionBar.style.display = 'none';
+            }
+        }
+    }
+
+    processDiscardResponse(tile, discarderIdx) {
+        if (this.gameState !== 'PLAYING') return;
+
+        const huWinners = [];
+        const isDiHu = (discarderIdx === this.dealer && this.isFirstDiscard);
+
+        for (let offset = 1; offset <= 3; offset++) {
+            const pIdx = (discarderIdx + offset) % 4;
+            const player = this.players[pIdx];
+            if (MahjongEvaluator.canDiscardHu(player.hand, player.melds, tile, isDiHu, false)) {
+                huWinners.push(pIdx);
+            }
+        }
+
+        if (huWinners.length > 0) {
+            if (huWinners.includes(0)) {
+                this.checkHumanResponseToDiscard(tile, discarderIdx);
+                return;
+            } else {
+                const huType = isDiHu ? 'DI_HU' : null;
+                this.announceAction(`⚡ ${huWinners.map(i => this.players[i].name).join(' & ')} 点炮胡牌！`);
+                setTimeout(() => {
+                    this.handleWin(huWinners, discarderIdx, tile, false, huType);
+                }, 800);
+                return;
+            }
+        }
+
+        if (discarderIdx !== 0) {
+            const human = this.players[0];
+            const count = human.hand.filter(t => t === tile).length;
+            if (count >= 2) {
+                this.checkHumanResponseToDiscard(tile, discarderIdx);
+                return;
+            }
+        }
+
+        for (let offset = 1; offset <= 3; offset++) {
+            const pIdx = (discarderIdx + offset) % 4;
+            if (pIdx === 0) continue;
+
+            const aiPlayer = this.players[pIdx];
+            const count = aiPlayer.hand.filter(t => t === tile).length;
+
+            if (count === 3 && this.deck.length > 0) {
+                aiPlayer.hand = aiPlayer.hand.filter(t => t !== tile);
+                aiPlayer.hand = sortTiles(aiPlayer.hand);
+                aiPlayer.melds.push({ type: 'zhigang', tiles: [tile, tile, tile, tile] });
+                this.players[discarderIdx].discards.pop();
+                
+                sound.playGang('zhigang');
+                this.applyGangScore(pIdx, false, discarderIdx);
+
+                this.turn = pIdx;
+                if (this.deck.length > 0) aiPlayer.hand.push(this.deck.pop());
+                this.updateUI();
+                setTimeout(() => this.processAITurn(800), 800);
+                return;
+            }
+
+            if (count === 2) {
+                const pengEval = RobotAI.evaluatePengDecision(aiPlayer, tile);
+                // 追加决策日志
+                aiPlayer.decisionLogs.push(pengEval.detailHtml);
+
+                if (pengEval.shouldPeng) {
+                    let pCount = 0;
+                    aiPlayer.hand = aiPlayer.hand.filter(t => {
+                        if (t === tile && pCount < 2) { pCount++; return false; }
+                        return true;
+                    });
+                    aiPlayer.hand = sortTiles(aiPlayer.hand);
+                    aiPlayer.melds.push({ type: 'peng', tiles: [tile, tile, tile] });
+                    this.players[discarderIdx].discards.pop();
+
+                    sound.playPeng();
+                    const tileP = parseTile(tile);
+                    const tileName = tileP.suit === SUITS.ZHONG ? '红中' : `${tileP.num}${tileP.char}`;
+                    this.announceAction(`💥 ${aiPlayer.name} 碰 [${tileName}]！`);
+
+                    this.turn = pIdx;
+                    this.lastDiscard = null;
+                    aiPlayer.justPenged = true;
+                    this.updateUI();
+                    setTimeout(() => this.processAITurn(800), 800);
+                    return;
+                }
+            }
+        }
+
+        this.isFirstDiscard = false;
+        this.nextTurn();
+    }
+
+    checkHumanResponseToDiscard(tile, discarderIdx) {
+        if (this.gameState !== 'PLAYING') return;
+
+        const human = this.players[0];
+        const isDiHu = (discarderIdx === this.dealer && this.isFirstDiscard);
+        const canHu = MahjongEvaluator.canDiscardHu(human.hand, human.melds, tile, isDiHu, false);
+
+        const count = human.hand.filter(t => t === tile).length;
+        const canPeng = count >= 2 && discarderIdx !== 0;
+        const canGang = count === 3 && discarderIdx !== 0;
+
+        const actionBar = document.getElementById('actionBar');
+        const btnHu = document.getElementById('btnHu');
+        const btnGang = document.getElementById('btnGang');
+        const btnPeng = document.getElementById('btnPeng');
+        const btnDiscard = document.getElementById('btnDiscard');
+        const btnPass = document.getElementById('btnPass');
+
+        btnHu.style.display = 'none';
+        btnGang.style.display = 'none';
+        btnPeng.style.display = 'none';
+        btnDiscard.style.display = 'none';
+        btnPass.style.display = 'none';
+
+        if (canHu || canPeng || canGang) {
+            if (canHu) {
+                btnHu.innerText = isDiHu ? "地胡" : "胡";
+                btnHu.style.display = 'flex';
+            }
+            if (canGang) btnGang.style.display = 'flex';
+            if (canPeng) btnPeng.style.display = 'flex';
+            btnPass.style.display = 'flex';
+            actionBar.style.display = 'flex';
+        } else {
+            actionBar.style.display = 'none';
+            this.processDiscardResponse(tile, discarderIdx);
+        }
+    }
+
+    nextTurn() {
+        if (this.gameState !== 'PLAYING') return;
+
+        if (this.deck.length === 0) {
+            this.gameState = 'GAME_OVER';
+            document.getElementById('actionBar').style.display = 'none';
+            document.getElementById('turnIndicator').innerText = "流局 (牌墙摸完)";
+            document.getElementById('btnStart').innerText = "再来一局";
+
+            const gangDiffs = this.calculateFinalGangScores();
+            this.players.forEach((p, idx) => {
+                p.score += gangDiffs[idx];
+            });
+            this.score = this.players[0].score;
+            this.saveStorage();
+
+            let detailHtml = `<div style="font-size: 14px; font-weight: bold; color: var(--accent-gold); margin-bottom: 10px;">🀄 牌墙已摸完，本局流局(荒庄)！</div>`;
+            detailHtml += `<div style="margin-bottom: 8px;"><b>杠分结算变动：</b></div>`;
+            this.players.forEach((p, idx) => {
+                const gDiff = gangDiffs[idx];
+                const gStr = gDiff > 0 ? `+${gDiff}` : `${gDiff}`;
+                detailHtml += `<div class='settle-row'><span>${p.name}</span><span style='color:${gDiff >= 0 ? '#2ecc71' : '#e74c3c'}; font-weight: bold;'>${gStr} 分</span></div>`;
+            });
+
+            showModal("🤝 流局结算", detailHtml);
+            this.updateUI();
+            return;
+        }
+
+        this.turn = (this.turn + 1) % 4;
+        const currentPlayer = this.players[this.turn];
+        
+        const drawnTile = this.deck.pop();
+        currentPlayer.hand.push(drawnTile);
+        sound.playDraw();
+
+        this.updateUI();
+
+        if (this.turn === 0) {
+            this.checkHumanTurnOptions();
+        } else {
+            this.processAITurn(800);
+        }
+    }
+
+    calculateFinalGangScores() {
+        const gangDiffs = [0, 0, 0, 0];
+        const stake = this.stake;
+
+        this.currentRoundGangs.forEach(g => {
+            if (g.type === 'angang') {
+                const ptsEach = stake * 2;
+                for (let i = 0; i < 4; i++) {
+                    if (i === g.playerIdx) gangDiffs[i] += ptsEach * 3;
+                    else gangDiffs[i] -= ptsEach;
+                }
+            } else if (g.type === 'zhigang' || g.type === 'minggang') {
+                gangDiffs[g.playerIdx] += 15;
+                gangDiffs[g.sourceIdx] -= 15;
+            } else if (g.type === 'jiagang') {
+                const ptsEach = stake * 1;
+                for (let i = 0; i < 4; i++) {
+                    if (i === g.playerIdx) gangDiffs[i] += ptsEach * 3;
+                    else gangDiffs[i] -= ptsEach;
+                }
+            }
+        });
+
+        return gangDiffs;
+    }
+
+    applyGangScore(gangPlayerIdx, isAnGang, sourcePlayerIdx = -1) {
+        const player = this.players[gangPlayerIdx];
+        let noticeText = "";
+
+        if (isAnGang) {
+            this.currentRoundGangs.push({ type: 'angang', playerIdx: gangPlayerIdx });
+            noticeText = `💥 ${player.name} 暗杠！`;
+        } else if (sourcePlayerIdx >= 0) {
+            this.currentRoundGangs.push({ type: 'zhigang', playerIdx: gangPlayerIdx, sourceIdx: sourcePlayerIdx });
+            noticeText = `💥 ${player.name} 直杠！(放杠: ${this.players[sourcePlayerIdx].name})`;
+        } else {
+            this.currentRoundGangs.push({ type: 'jiagang', playerIdx: gangPlayerIdx });
+            noticeText = `💥 ${player.name} 补杠！`;
+        }
+
+        this.announceAction(noticeText);
+    }
+
+    handleWin(winners, discarderIdx, winTile, isSelfDraw, specialType = null) {
+        this.gameState = 'GAME_OVER';
+
+        document.getElementById('actionBar').style.display = 'none';
+        document.getElementById('turnIndicator').innerText = "对局结束";
+        document.getElementById('btnStart').innerText = "再来一局";
+
+        if (!winners.includes(this.dealer)) {
+            this.dealer = (this.dealer + 1) % 4;
+        }
+
+        const mult = this.stake / 5;
+        const roundWinDiffs = [0, 0, 0, 0];
+        const playerWinStatus = ["", "", "", ""];
+        let announceSpeechText = "胡牌啦";
+
+        if (specialType === 'TIAN_HU') {
+            const winnerIdx = winners[0];
+            announceSpeechText = "天胡";
+            playerWinStatus[winnerIdx] = "天胡 (庄家发牌即胡)";
+            
+            this.players.forEach((_, idx) => {
+                if (idx === winnerIdx) {
+                    roundWinDiffs[idx] += 120 * mult;
+                } else {
+                    roundWinDiffs[idx] -= 40 * mult;
+                    playerWinStatus[idx] = "被天胡";
+                }
+            });
+        } else if (specialType === 'DI_HU') {
+            announceSpeechText = winners.length > 1 ? "一炮多响，地胡" : "地胡";
+            playerWinStatus[discarderIdx] = "放炮 (庄家首发点炮)";
+
+            winners.forEach(wIdx => {
+                playerWinStatus[wIdx] = "地胡";
+                roundWinDiffs[wIdx] += 60 * mult;
+                roundWinDiffs[discarderIdx] -= 60 * mult;
+            });
+
+            this.players.forEach((_, idx) => {
+                if (!winners.includes(idx) && idx !== discarderIdx) {
+                    playerWinStatus[idx] = "旁观";
+                }
+            });
+        } else {
+            winners.forEach(wIdx => {
+                const winner = this.players[wIdx];
+                const fullHand = isSelfDraw ? winner.hand : [...winner.hand, winTile];
+
+                let baseSelfDrawPerPlayer = 10;
+                let baseDiscardPay = 15;
+                let handName = "平胡";
+
+                const is7P = MahjongEvaluator.checkSevenPairs(fullHand);
+                const isBigP = MahjongEvaluator.checkBigPairs(fullHand, winner.melds);
+                const isFlush = MahjongEvaluator.isFlush(fullHand, winner.melds);
+
+                if (is7P) {
+                    const deluxeCount = is7P.deluxe;
+                    let prefix = "";
+                    if (deluxeCount === 1) prefix = "豪华";
+                    else if (deluxeCount === 2) prefix = "双豪华";
+                    else if (deluxeCount >= 3) prefix = "三豪华";
+
+                    handName = `${prefix}七小对`;
+                    baseSelfDrawPerPlayer = 20 * Math.pow(2, deluxeCount);
+                    baseDiscardPay = 30 * Math.pow(2, deluxeCount);
+                } else if (isBigP) {
+                    handName = "大对子(碰碰胡)";
+                    baseSelfDrawPerPlayer = 20;
+                    baseDiscardPay = 30;
+                }
+
+                if (isFlush) {
+                    handName = `清一色${handName}`;
+                    baseSelfDrawPerPlayer *= 4;
+                    baseDiscardPay *= 4;
+                }
+
+                if (specialType === 'QIANG_GANG_HU') {
+                    handName = `抢杠胡 (${handName})`;
+                }
+
+                announceSpeechText = handName;
+                const finalSelfDrawEach = baseSelfDrawPerPlayer * mult;
+                const finalDiscardPay = baseDiscardPay * mult;
+
+                if (specialType === 'QIANG_GANG_HU') {
+                    // 设计文档：普通抢杠胡30分，清一色抢杠胡120分。
+                    const qiangGangPay = (isFlush ? 120 : 30) * mult;
+                    playerWinStatus[wIdx] = `抢杠胡 [${handName}]`;
+                    playerWinStatus[discarderIdx] = `被抢杠 (包付 ${qiangGangPay}分)`;
+
+                    roundWinDiffs[wIdx] += qiangGangPay;
+                    roundWinDiffs[discarderIdx] -= qiangGangPay;
+
+                    for (let i = 0; i < 4; i++) {
+                        if (i !== wIdx && i !== discarderIdx) playerWinStatus[i] = "旁观";
+                    }
+                } else if (isSelfDraw) {
+                    playerWinStatus[wIdx] = `自摸 [${handName}]`;
+                    this.players.forEach((_, idx) => {
+                        if (idx === wIdx) {
+                            roundWinDiffs[idx] += finalSelfDrawEach * 3;
+                        } else {
+                            roundWinDiffs[idx] -= finalSelfDrawEach;
+                            playerWinStatus[idx] = `被自摸 (${finalSelfDrawEach}分)`;
+                        }
+                    });
+                } else {
+                    playerWinStatus[wIdx] = `接炮 [${handName}]`;
+                    playerWinStatus[discarderIdx] = `放炮 (点炮 ${finalDiscardPay}分)`;
+
+                    roundWinDiffs[wIdx] += finalDiscardPay;
+                    roundWinDiffs[discarderIdx] -= finalDiscardPay;
+
+                    for (let i = 0; i < 4; i++) {
+                        if (i !== wIdx && i !== discarderIdx) playerWinStatus[i] = "旁观";
+                    }
+                }
+            });
+        }
+
+        const gangDiffs = this.calculateFinalGangScores();
+        const roundTotalDiffs = [0, 0, 0, 0];
+
+        this.players.forEach((p, idx) => {
+            roundTotalDiffs[idx] = roundWinDiffs[idx] + gangDiffs[idx];
+            p.score += roundTotalDiffs[idx];
+        });
+
+        let detailHtml = `<div style="font-size: 13px; font-weight: bold; color: var(--accent-gold); margin-bottom: 6px;">📋 本局四家结算明细 (底分 ${this.stake} 元):</div>`;
+        detailHtml += `<table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; margin-bottom: 12px;">`;
+        detailHtml += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.2); color: #bdc3c7;">
+                        <th style="padding: 4px;">玩家</th>
+                        <th style="padding: 4px;">输赢类型</th>
+                        <th style="padding: 4px; text-align: right;">胡牌分</th>
+                        <th style="padding: 4px; text-align: right;">杠分</th>
+                        <th style="padding: 4px; text-align: right;">本局变动</th>
+                       </tr>`;
+
+        this.players.forEach((p, idx) => {
+            const winDiff = roundWinDiffs[idx];
+            const gangDiff = gangDiffs[idx];
+            const totDiff = roundTotalDiffs[idx];
+
+            const winStr = winDiff > 0 ? `+${winDiff}` : `${winDiff}`;
+            const gangStr = gangDiff > 0 ? `+${gangDiff}` : `${gangDiff}`;
+            const totStr = totDiff > 0 ? `+${totDiff}` : `${totDiff}`;
+            const totColor = totDiff >= 0 ? '#2ecc71' : '#e74c3c';
+
+            detailHtml += `<tr style="border-bottom: 1px dashed rgba(255,255,255,0.1);">
+                            <td style="padding: 6px 4px; font-weight: bold;">${p.name}</td>
+                            <td style="padding: 6px 4px; font-size: 12px; color: #f1c40f;">${playerWinStatus[idx] || '未胡'}</td>
+                            <td style="padding: 6px 4px; text-align: right; color: ${winDiff >= 0 ? '#2ecc71' : '#e74c3c'};">${winStr}</td>
+                            <td style="padding: 6px 4px; text-align: right; color: ${gangDiff >= 0 ? '#2ecc71' : '#e74c3c'};">${gangStr}</td>
+                            <td style="padding: 6px 4px; text-align: right; font-weight: bold; color: ${totColor};">${totStr}</td>
+                           </tr>`;
+        });
+        detailHtml += `</table>`;
+
+        detailHtml += `<div style="font-weight: bold; color: var(--accent-gold); border-top: 1px solid rgba(255,255,255,0.2); padding-top: 8px;">📊 累计总积分榜:</div>`;
+        this.players.forEach(p => {
+            const color = p.score >= 0 ? '#2ecc71' : '#e74c3c';
+            detailHtml += `<div class='settle-row'><span>${p.name}</span><span style='color:${color}; font-weight: bold;'>${p.score} 分</span></div>`;
+        });
+
+        this.score = this.players[0].score;
+        this.saveStorage();
+
+        sound.playHu(announceSpeechText);
+        setTimeout(() => {
+            showModal("🏆 本局对局结算", detailHtml);
+            this.updateUI();
+        }, 1200);
+    }
+
+    selectTile(index) {
+        if (this.gameState !== 'PLAYING' || this.turn !== 0) return;
+        sound.init();
+        if (this.selectedTileIndex === index) {
+            this.humanDiscard();
+        } else {
+            this.selectedTileIndex = index;
+            this.checkHumanTurnOptions();
+            this.updateUI();
+        }
+    }
+
+    humanDiscard() {
+        if (this.gameState !== 'PLAYING' || this.turn !== 0 || this.selectedTileIndex < 0) return;
+        sound.init();
+        const human = this.players[0];
+        const tile = human.hand.splice(this.selectedTileIndex, 1)[0];
+        human.hand = sortTiles(human.hand);
+        human.discards.push(tile);
+        human.justPenged = false;
+        
+        this.selectedTileIndex = -1;
+        this.lastDiscard = tile;
+        this.lastDiscarder = 0;
+
+        sound.playDiscard(tile);
+        document.getElementById('actionBar').style.display = 'none';
+        this.updateUI();
+
+        setTimeout(() => {
+            this.processDiscardResponse(tile, 0);
+        }, 1000);
+    }
+
+    humanPeng() {
+        if (this.gameState !== 'PLAYING' || !this.lastDiscard || this.lastDiscarder === 0) return;
+        sound.init();
+        const human = this.players[0];
+        const tile = this.lastDiscard;
+        let count = 0;
+        human.hand = human.hand.filter(t => {
+            if (t === tile && count < 2) { count++; return false; }
+            return true;
+        });
+        human.hand = sortTiles(human.hand);
+        human.melds.push({ type: 'peng', tiles: [tile, tile, tile] });
+        this.players[this.lastDiscarder].discards.pop();
+
+        sound.playPeng();
+        const tileP = parseTile(tile);
+        const tileName = tileP.suit === SUITS.ZHONG ? '红中' : `${tileP.num}${tileP.char}`;
+        this.announceAction(`💥 我 碰 [${tileName}]！`);
+
+        this.turn = 0;
+        this.lastDiscard = null;
+        human.justPenged = true;
+        this.checkHumanTurnOptions();
+        this.updateUI();
+    }
+
+    humanGang() {
+        if (this.gameState !== 'PLAYING') return;
+        sound.init();
+        const human = this.players[0];
+
+        if (this.turn === 0) {
+            if (human.justPenged) return;
+            const counts = MahjongEvaluator.getCounts(human.hand);
+            let gangTile = null;
+            let gangType = '';
+
+            for (const t in counts) {
+                if (counts[t] === 4) {
+                    gangTile = t;
+                    gangType = 'angang';
+                    break;
+                }
+            }
+            if (!gangTile) {
+                for (const t in counts) {
+                    if (human.melds.some(m => m.type === 'peng' && m.tiles[0] === t)) {
+                        gangTile = t;
+                        gangType = 'bugang';
+                        break;
+                    }
+                }
+            }
+
+            if (gangTile) {
+                if (gangType === 'angang') {
+                    sound.playGang('angang');
+                    human.hand = human.hand.filter(t => t !== gangTile);
+                    human.hand = sortTiles(human.hand);
+                    human.melds.push({ type: 'angang', tiles: [gangTile, gangTile, gangTile, gangTile] });
+                    this.applyGangScore(0, true);
+                    if (this.deck.length > 0) human.hand.push(this.deck.pop());
+                    this.checkHumanTurnOptions();
+                    this.updateUI();
+                } else {
+                    this.tryBuGang(0, gangTile);
+                }
+            }
+        } else {
+            if (!this.lastDiscard || this.lastDiscarder === 0) return;
+            const tile = this.lastDiscard;
+            const count = human.hand.filter(t => t === tile).length;
+            if (count === 3) {
+                human.hand = human.hand.filter(t => t !== tile);
+                human.hand = sortTiles(human.hand);
+                human.melds.push({ type: 'zhigang', tiles: [tile, tile, tile, tile] });
+                this.players[this.lastDiscarder].discards.pop();
+
+                sound.playGang('zhigang');
+                this.applyGangScore(0, false, this.lastDiscarder);
+
+                this.turn = 0;
+                if (this.deck.length > 0) human.hand.push(this.deck.pop());
+                this.checkHumanTurnOptions();
+                this.updateUI();
+            }
+        }
+    }
+
+    // 补杠前最后检查抢杠胡；此时碰牌仍保持peng状态，补杠牌仍在杠家手里。
+    tryBuGang(gangPlayerIdx, tile) {
+        if (this.gameState !== 'PLAYING') return false;
+
+        const gangPlayer = this.players[gangPlayerIdx];
+        const targetMeld = gangPlayer.melds.find(m => m.type === 'peng' && m.tiles && m.tiles[0] === tile);
+        if (!targetMeld) {
+            this.pendingQiangGang = null;
+            this.announceAction(`⚠️ 无法补杠：没有找到 [${(parseTile(tile).suit === SUITS.ZHONG ? '红中' : `${parseTile(tile).num}${parseTile(tile).char}`)}] 的碰牌。`);
+            return false;
+        }
+
+        const winners = [];
+        for (let i = 0; i < 4; i++) {
+            if (i === gangPlayerIdx) continue;
+            const player = this.players[i];
+            // 抢杠胡只看“当前暗手 + 待补杠牌”的标准结构。
+            if (MahjongEvaluator.canWinWithTile(player.hand, player.melds, tile, { isQiangGang: true })) {
+                winners.push(i);
+            }
+        }
+
+        const tileName = (parseTile(tile).suit === SUITS.ZHONG ? '红中' : `${parseTile(tile).num}${parseTile(tile).char}`);
+        if (winners.length === 0) {
+            this.pendingQiangGang = null;
+            this.executeBuGang(gangPlayerIdx, tile);
+            return false;
+        }
+
+        this.pendingQiangGang = { gangPlayerIdx, tile, winners: winners.slice() };
+
+        if (winners.includes(0)) {
+            const other = winners.filter(i => i !== 0);
+            const otherText = other.length ? `；${other.map(i => this.players[i].name).join('、')}也满足抢杠胡条件` : '';
+            const actionBar = document.getElementById('actionBar');
+            const btnHu = document.getElementById('btnHu');
+            const btnGang = document.getElementById('btnGang');
+            const btnPeng = document.getElementById('btnPeng');
+            const btnDiscard = document.getElementById('btnDiscard');
+            const btnPass = document.getElementById('btnPass');
+            btnHu.innerText = '抢杠胡';
+            btnHu.style.display = 'flex';
+            btnGang.style.display = 'none';
+            btnPeng.style.display = 'none';
+            btnDiscard.style.display = 'none';
+            btnPass.style.display = 'flex';
+            actionBar.style.display = 'flex';
+            this.announceAction(`⚠️ ${gangPlayer.name} 补杠 [${tileName}]：你满足抢杠胡${otherText}！`);
+            return true;
+        }
+
+        this.announceAction(`⚡ ${winners.map(i => this.players[i].name).join('、')} 抢杠胡 [${tileName}]！`);
+        setTimeout(() => {
+            if (this.gameState === 'PLAYING' && this.pendingQiangGang && this.pendingQiangGang.tile === tile) {
+                this.pendingQiangGang = null;
+                this.handleWin(winners, gangPlayerIdx, tile, false, 'QIANG_GANG_HU');
+            }
+        }, 800);
+        return true;
+    }
+
+    executeBuGang(gangPlayerIdx, tile) {
+        const player = this.players[gangPlayerIdx];
+        sound.playGang('bugang');
+        
+        const idx = player.hand.indexOf(tile);
+        if (idx >= 0) player.hand.splice(idx, 1);
+        player.hand = sortTiles(player.hand);
+        
+        const targetMeld = player.melds.find(m => (m.type === 'peng' || m.type === 'gang') && m.tiles[0] === tile);
+        if (targetMeld) {
+            targetMeld.type = 'gang';
+            if (targetMeld.tiles.length === 3) {
+                targetMeld.tiles.push(tile);
+            }
+        }
+
+        this.applyGangScore(gangPlayerIdx, false, -1);
+        const tileP = parseTile(tile);
+        const tileName = tileP.suit === SUITS.ZHONG ? '红中' : `${tileP.num}${tileP.char}`;
+        this.announceAction(`💥 ${player.name} 补杠 [${tileName}]！`);
+
+        if (this.deck.length > 0) player.hand.push(this.deck.pop());
+        this.updateUI();
+
+        if (gangPlayerIdx === 0) {
+            this.checkHumanTurnOptions();
+        } else {
+            setTimeout(() => this.processAITurn(800), 800);
+        }
+    }
+
+    processAITurn(delay = 800) {
+        if (this.gameState !== 'PLAYING' || this.turn === 0) return;
+        const aiIdx = this.turn;
+        const aiPlayer = this.players[aiIdx];
+
+        document.getElementById(`info-${aiIdx}`).classList.add('active');
+        this.announceAction(`⏳ ${aiPlayer.name} 深度思考中...`);
+
+        setTimeout(() => {
+            document.getElementById(`info-${aiIdx}`).classList.remove('active');
+            if (this.gameState !== 'PLAYING') return;
+
+            const forceDiscard = aiPlayer.justPenged;
+            const decision = RobotAI.makeDecision(this, aiIdx, forceDiscard);
+            aiPlayer.justPenged = false;
+            
+            // 追加决策日志
+            aiPlayer.decisionLogs.push(decision.detailHtml);
+
+            if (decision.action === 'HU') {
+                this.handleWin([aiIdx], -1, null, true);
+            } else if (decision.action === 'GANG') {
+                if (decision.gangType === 'angang') {
+                    sound.playGang('angang');
+                    aiPlayer.hand = aiPlayer.hand.filter(t => t !== decision.tile);
+                    aiPlayer.hand = sortTiles(aiPlayer.hand);
+                    aiPlayer.melds.push({ type: 'angang', tiles: [decision.tile, decision.tile, decision.tile, decision.tile] });
+                    this.applyGangScore(aiIdx, true);
+                    const tileP = parseTile(decision.tile);
+                    const tileName = tileP.suit === SUITS.ZHONG ? '红中' : `${tileP.num}${tileP.char}`;
+                    this.announceAction(`💥 ${aiPlayer.name} 暗杠 [${tileName}]！`);
+
+                    if (this.deck.length > 0) aiPlayer.hand.push(this.deck.pop());
+                    this.updateUI();
+
+                    setTimeout(() => this.processAITurn(800), 800);
+                } else {
+                    this.tryBuGang(aiIdx, decision.tile);
+                }
+            } else {
+                const idx = aiPlayer.hand.indexOf(decision.tile);
+                if (idx >= 0) aiPlayer.hand.splice(idx, 1);
+                aiPlayer.hand = sortTiles(aiPlayer.hand);
+                aiPlayer.discards.push(decision.tile);
+                this.lastDiscard = decision.tile;
+                this.lastDiscarder = aiIdx;
+
+                sound.playDiscard(decision.tile);
+                this.updateUI();
+
+                setTimeout(() => {
+                    this.checkHumanResponseToDiscard(decision.tile, aiIdx);
+                }, 1000);
+            }
+        }, delay);
+    }
+
+    updateUI() {
+        this.score = this.players[0].score;
+        document.getElementById('scoreDisplay').innerText = this.score;
+        document.getElementById('wallCount').innerText = this.deck.length;
+
+        [0, 1, 2, 3].forEach(idx => {
+            const tag = document.getElementById(`dealer-tag-${idx}`);
+            if (tag) {
+                tag.style.display = (idx === this.dealer) ? 'inline-block' : 'none';
+            }
+        });
+
+        this.players.forEach((p, idx) => {
+            const scoreEl = document.getElementById(`score-${idx}`);
+            if (scoreEl) scoreEl.innerText = p.score;
+        });
+
+        const turnNames = ['我自己 (南)', '机器人1 (东)', '机器人2 (北)', '机器人3 (西)'];
+        if (this.gameState === 'PLAYING') {
+            document.getElementById('turnIndicator').innerText = `${turnNames[this.turn]}`;
+        }
+
+        const banner = document.getElementById('lastDiscardBanner');
+        if (this.lastDiscard && this.lastDiscarder >= 0 && this.gameState === 'PLAYING') {
+            banner.style.display = 'flex';
+            document.getElementById('lastDiscardText').innerText = `${turnNames[this.lastDiscarder]} 打出:`;
+            document.getElementById('lastDiscardTileSlot').innerHTML = this.renderTileHtml(this.lastDiscard, true);
+        } else {
+            banner.style.display = 'none';
+        }
+
+        this.players.forEach((p, idx) => {
+            const discardEl = document.getElementById(`discards-${idx}`);
+            if (discardEl) {
+                discardEl.innerHTML = p.discards.map(t => this.renderTileHtml(t, true)).join('');
+            }
+
+            const meldEl = document.getElementById(`melds-${idx}`);
+            if (meldEl) {
+                meldEl.innerHTML = p.melds.map(m => {
+                    const isAnGang = m.type === 'angang';
+                    return `
+                        <div class="meld-group">
+                            ${m.tiles.map((t, tileIdx) => {
+                                const hideFace = isAnGang && (idx !== 0 && !this.showAITiles) && tileIdx < 3;
+                                return this.renderTileHtml(t, true, false, -1, false, hideFace);
+                            }).join('')}
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            const handEl = document.getElementById(`hand-${idx}`);
+            if (!handEl) return;
+
+            const isDrawGapTile = (i) => (!p.justPenged) && (p.hand.length % 3 === 2) && (i === p.hand.length - 1);
+
+            if (idx === 0) {
+                handEl.innerHTML = p.hand.map((t, i) => {
+                    return this.renderTileHtml(t, false, i === this.selectedTileIndex, i, isDrawGapTile(i));
+                }).join('');
+            } else {
+                const showFaceUp = (this.mode === 'practice' && this.showAITiles);
+                if (showFaceUp) {
+                    handEl.innerHTML = p.hand.map((t, i) => {
+                        return this.renderTileHtml(t, true, false, -1, isDrawGapTile(i));
+                    }).join('');
+                } else if (idx === 2) {
+                    handEl.innerHTML = p.hand.map((_, i) => {
+                        const gapClass = isDrawGapTile(i) ? 'drawn-tile-gap' : '';
+                        return `<div class="tile back-top ${gapClass}"></div>`;
+                    }).join('');
+                } else {
+                    handEl.innerHTML = p.hand.map((_, i) => {
+                        const gapClass = isDrawGapTile(i) ? 'side-drawn-tile-gap' : '';
+                        return `<div class="side-tile ${gapClass}"></div>`;
+                    }).join('');
+                }
+            }
+        });
+    }
+
+    renderTileHtml(tileStr, isSmall = false, isSelected = false, index = -1, isDrawGap = false, isAnGangBack = false) {
+        const t = parseTile(tileStr);
+        const smallClass = isSmall ? 'small' : '';
+        const selectClass = isSelected ? 'selected' : '';
+        const gapClass = isDrawGap ? 'drawn-tile-gap' : '';
+        const backClass = isAnGangBack ? 'angang-back' : '';
+        const clickAttr = index >= 0 ? `onclick="game.selectTile(${index})"` : '';
+
+        return `
+            <div class="tile ${smallClass} ${selectClass} ${gapClass} ${backClass}" data-suit="${t.suit}" ${clickAttr}>
+                <div class="tile-num">${t.num}</div>
+                ${t.char ? `<div class="tile-char">${t.char}</div>` : ''}
+            </div>
+        `;
+    }
+}
+
+let game = null;
+
+window.onload = function() {
+    game = new MahjongGame();
+
+    document.body.addEventListener('click', () => {
+        sound.init();
+    }, { once: true });
+
+    document.getElementById('btnTestVoice').addEventListener('click', () => {
+        sound.init();
+        sound.speakPhrase("语音播报测试：暗杠，补杠，直杠，抢杠胡");
+    });
+
+    const btnToggleAIHand = document.getElementById('btnToggleAIHand');
+
+    document.getElementById('modeSelect').addEventListener('change', (e) => {
+        game.mode = e.target.value;
+        if (game.mode === 'practice') {
+            btnToggleAIHand.style.display = 'inline-block';
+        } else {
+            btnToggleAIHand.style.display = 'none';
+            game.showAITiles = false;
+        }
+        game.updateUI();
+    });
+
+    btnToggleAIHand.addEventListener('click', () => {
+        game.showAITiles = !game.showAITiles;
+        btnToggleAIHand.innerText = game.showAITiles ? "👁️ 隐藏AI手牌" : "👁️ 显示AI手牌";
+        game.updateUI();
+    });
+
+    document.getElementById('stakeSelect').addEventListener('change', (e) => {
+        game.stake = parseInt(e.target.value, 10);
+    });
+
+    document.getElementById('btnResetScore').addEventListener('click', () => {
+        game.resetScore();
+    });
+
+    document.getElementById('btnSoundToggle').addEventListener('click', (e) => {
+        sound.enabled = !sound.enabled;
+        e.target.innerText = sound.enabled ? "🔊 音效" : "🔇 静音";
+    });
+
+    document.getElementById('btnStart').addEventListener('click', () => {
+        game.startNewGame();
+        document.getElementById('btnStart').innerText = "重新开始";
+    });
+
+    document.getElementById('btnDiscard').addEventListener('click', () => {
+        game.humanDiscard();
+    });
+
+    document.getElementById('btnPeng').addEventListener('click', () => {
+        game.humanPeng();
+    });
+
+    document.getElementById('btnGang').addEventListener('click', () => {
+        game.humanGang();
+    });
+
+    document.getElementById('btnPass').addEventListener('click', () => {
+        document.getElementById('actionBar').style.display = 'none';
+        
+        if (game.pendingQiangGang) {
+            const { gangPlayerIdx, tile, winners = [] } = game.pendingQiangGang;
+            game.pendingQiangGang = null;
+            const aiWinners = winners.filter(i => i !== 0);
+            if (aiWinners.length > 0) {
+                const tileP = parseTile(tile);
+                const tileName = tileP.suit === SUITS.ZHONG ? '红中' : `${tileP.num}${tileP.char}`;
+                game.announceAction(`⚡ ${aiWinners.map(i => game.players[i].name).join('、')} 抢杠胡 [${tileName}]！`);
+                setTimeout(() => game.handleWin(aiWinners, gangPlayerIdx, tile, false, 'QIANG_GANG_HU'), 500);
+            } else {
+                game.executeBuGang(gangPlayerIdx, tile);
+            }
+            return;
+        }
+
+        if (game.turn === 0) {
+            game.processDiscardResponse(game.lastDiscard, game.lastDiscarder);
+        } else {
+            game.nextTurn();
+        }
+    });
+
+    document.getElementById('btnHu').addEventListener('click', () => {
+        if (game.pendingQiangGang) {
+            const { gangPlayerIdx, tile, winners = [0] } = game.pendingQiangGang;
+            game.pendingQiangGang = null;
+            // 一炮多响：只要玩家选择抢杠胡，同时满足条件的机器人也一并胡牌。
+            game.handleWin(winners, gangPlayerIdx, tile, false, 'QIANG_GANG_HU');
+            return;
+        }
+
+        const isTianHu = (game.dealer === 0 && game.players[0].discards.length === 0 && game.turn === 0 && game.isFirstDiscard);
+        const isDiHu = (game.lastDiscarder === game.dealer && game.isFirstDiscard && game.turn !== 0);
+
+        if (isTianHu) {
+            game.handleWin([0], -1, null, true, 'TIAN_HU');
+        } else if (isDiHu) {
+            game.handleWin([0], game.dealer, game.lastDiscard, false, 'DI_HU');
+        } else {
+            game.handleWin([0], game.lastDiscarder, game.lastDiscard, game.turn === 0);
+        }
+    });
+
+    // 练习模式下支持查看全流程决策历史
+    [1, 2, 3].forEach(idx => {
+        document.getElementById(`info-${idx}`).addEventListener('click', () => {
+            if (game.mode === 'practice') {
+                const logs = game.players[idx].decisionLogs;
+                let detail = "";
+                if (logs && logs.length > 0) {
+                    detail = logs.slice().reverse().join(''); // 倒序展示，最新的在上面
+                } else {
+                    detail = `<p style="padding:10px;">尚无决策思考记录，请在AI出牌/摸牌/碰杠后再点击查看。</p>`;
+                }
+                showModal(`🤖 机器人${idx} 全流程战术与决策历史 (最新在最前)`, detail);
+            }
+        });
+    });
+
+    document.getElementById('modalBtnClose').addEventListener('click', hideModal);
+};
+
+function showModal(title, contentHtml) {
+    document.getElementById('modalTitle').innerText = title;
+    document.getElementById('modalBody').innerHTML = contentHtml;
+    document.getElementById('modalOverlay').classList.add('show');
+}
+
+function hideModal() {
+    document.getElementById('modalOverlay').classList.remove('show');
+}
+</script>
+</body>
+</html>
