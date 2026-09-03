@@ -3,7 +3,7 @@
 <head data-page-node-id="G8SzPTkUfyhnno6V7N8v7I">
     <meta charset="UTF-8" data-page-node-id="QkNfygqy1l0uC0U8BzVtzd">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" data-page-node-id="lnbW9fZlsJy1730Pe0z9WU">
-    <title>县城麻将 - 单机人机对战</title>
+    <title>浦城麻将 - 单机人机对战</title>
     <style>
         :root {
             --bg-color: #050d08;
@@ -165,12 +165,15 @@
         .area-north > .player-info { flex-shrink: 0; }
         .area-north > div:last-child { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 8px; }
 
-        /* 需求2: 东西家碰杠与手牌墙分区，碰杠多了换行不挤手牌 */
-        .area-west { grid-row: 2; grid-column: 1; flex-direction: column; justify-content: center; align-items: center; gap: 8px; overflow: hidden; }
-        .area-east { grid-row: 2; grid-column: 3; flex-direction: column; justify-content: center; align-items: center; gap: 8px; overflow: hidden; }
-        .area-west > .player-info, .area-east > .player-info { flex-shrink: 0; }
-        .area-west .melds-container, .area-east .melds-container { flex-shrink: 0; max-height: 120px; overflow: hidden; flex-wrap: wrap; align-content: flex-start; justify-content: center; }
-        .area-west .side-tile-wall, .area-east .side-tile-wall { flex: 1 1 auto; min-height: 30px; overflow: hidden; align-content: flex-start; }
+        /* 需求2: 东西家碰杠与手牌墙分区，碰杠多了换行不挤手牌。
+           容器用 grid（三行: 头像/碰杠/手牌墙）而非 flex——WebKit(Safari) 对
+           "flex伸缩高度+列向wrap"不重新折行（只显示一列的根因），
+           grid 行高是真正确定的高度，手牌墙折行在全浏览器可靠。 */
+        .area-west { grid-row: 2; grid-column: 1; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); justify-items: center; row-gap: 8px; overflow: hidden; }
+        .area-east { grid-row: 2; grid-column: 3; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); justify-items: center; row-gap: 8px; overflow: hidden; }
+        .area-west > .player-info, .area-east > .player-info { flex-shrink: 0; justify-self: center; }
+        .area-west .melds-container, .area-east .melds-container { max-height: 120px; overflow: hidden; flex-wrap: wrap; align-content: flex-start; justify-content: center; justify-self: center; }
+        .area-west .side-tile-wall, .area-east .side-tile-wall { width: 100%; min-height: 0; height: 100%; overflow: hidden; align-content: center; }
         /* 东西两侧碰/杠牌：缩小牌面让杠牌(4张)整行放下列宽内，多组碰杠竖向换行完整显示 */
         .area-west .meld-group, .area-east .meld-group { padding: 1px; gap: 1px; }
         .area-west .meld-group .tile.small, .area-east .meld-group .tile.small { width: 24px; height: 32px; border-radius: 3px; }
@@ -600,6 +603,7 @@
 
             .area-west .side-tile-wall,
             .area-east .side-tile-wall {
+                flex: 0 0 auto;
                 flex-direction: row !important;
                 flex-wrap: wrap !important;
                 width: 100%;
@@ -1680,7 +1684,38 @@ class SoundSystem {
         this.enabled = true;
         this.ctx = null;
         this.voice = null;
+        this.keepAlive = null;
         this.initVoices();
+        this.bindUnlock();
+    }
+
+    // Safari/iOS 修复①: 首次用户手势立即解锁并预热音频，不再等第一次游戏音效时才懒创建
+    bindUnlock() {
+        const unlock = () => {
+            this.init();
+        };
+        ['pointerdown', 'touchend', 'keydown'].forEach(ev =>
+            window.addEventListener(ev, unlock, { passive: true, capture: true }));
+        // iOS 切后台/打断后恢复
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) this.init();
+        });
+        window.addEventListener('pageshow', () => this.init());
+    }
+
+    // Safari/iOS 修复②: 零增益保活振荡器，防止 Safari 音频渲染线程休眠
+    // （休眠后第一声提示音要等线程唤醒，正是"提示音晚一点"的主因；Chrome 无此行为）
+    startKeepAlive() {
+        if (this.keepAlive || !this.ctx) return;
+        try {
+            const osc = this.ctx.createOscillator();
+            const g = this.ctx.createGain();
+            g.gain.value = 0;
+            osc.connect(g);
+            g.connect(this.ctx.destination);
+            osc.start();
+            this.keepAlive = osc;
+        } catch (e) {}
     }
 
     initVoices() {
@@ -1706,10 +1741,24 @@ class SoundSystem {
     init() {
         if (!this.ctx) {
             const AudioCtx = window.AudioContext || window.webkitAudioContext;
-            if (AudioCtx) this.ctx = new AudioCtx();
+            if (AudioCtx) {
+                this.ctx = new AudioCtx();
+                // 修复③: 兼容 iOS 特有的 interrupted 状态——任何非 running 状态都尝试恢复
+                this.ctx.onstatechange = () => {
+                    if (this.ctx.state === 'running') this.startKeepAlive();
+                };
+            }
         }
-        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
-        if ('speechSynthesis' in window) window.speechSynthesis.resume();
+        if (this.ctx && this.ctx.state !== 'running') {
+            try {
+                const p = this.ctx.resume();
+                if (p && p.catch) p.catch(() => {});
+            } catch (e) {}
+        }
+        if (this.ctx && this.ctx.state === 'running') this.startKeepAlive();
+        if ('speechSynthesis' in window) {
+            try { window.speechSynthesis.resume(); } catch (e) {}
+        }
     }
 
     playTone(freq, duration, type = 'sine', gainVal = 0.1) {
@@ -1720,13 +1769,15 @@ class SoundSystem {
             const osc = this.ctx.createOscillator();
             const gain = this.ctx.createGain();
             osc.type = type;
-            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-            gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+            // 修复④: 调度到当前渲染量子之后(+10ms)，避免 Safari 把音符排在已过去的时间点上被吞/延后
+            const t0 = this.ctx.currentTime + 0.01;
+            osc.frequency.setValueAtTime(freq, t0);
+            gain.gain.setValueAtTime(gainVal, t0);
+            gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
             osc.connect(gain);
             gain.connect(this.ctx.destination);
-            osc.start();
-            osc.stop(this.ctx.currentTime + duration);
+            osc.start(t0);
+            osc.stop(t0 + duration);
         } catch(e) {}
     }
 
@@ -1932,7 +1983,8 @@ class MahjongGame {
 
         if (this.turn === 0) {
             const isTianHu = (this.dealer === 0 && human.discards.length === 0 && this.isFirstDiscard);
-            const canHu = MahjongEvaluator.canSelfDrawHu(human.hand, human.melds);
+            // 刚碰完牌不允许马上胡：此时成牌相当于别人点炮，普通牌型只允许自摸/抢杠胡（设计 4.3），碰后必须出牌
+            const canHu = !human.justPenged && MahjongEvaluator.canSelfDrawHu(human.hand, human.melds);
             
             if (canHu) {
                 btnHu.innerText = isTianHu ? "天胡" : "胡";
