@@ -3,7 +3,7 @@
 <head data-page-node-id="G8SzPTkUfyhnno6V7N8v7I">
     <meta charset="UTF-8" data-page-node-id="QkNfygqy1l0uC0U8BzVtzd">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" data-page-node-id="lnbW9fZlsJy1730Pe0z9WU">
-    <title>浦城麻将 - 单机人机对战</title>
+    <title>县城麻将 - 单机人机对战</title>
     <style>
         :root {
             --bg-color: #050d08;
@@ -1012,9 +1012,15 @@ class RobotAI {
         }
     }
 
-    static evaluateHandValue(tiles) {
+    // tiles：当前手牌（不含已碰/杠出去的组）；melds：已亮明的组（碰/杠）
+    // 已碰/杠的每一组按"一组面子 = 100 分"计结构分，
+    // 这样：碰过1组的人手牌10张+碰1组 = handScore(10) + 100，
+    // 与未碰者的13张手牌（结构分handScore(13)）就有了可比性。
+    static evaluateHandValue(tiles, melds = []) {
         const sorted = sortTiles(tiles);
-        return RobotAI.findMaxMeldScore(sorted, {});
+        const handScore = RobotAI.findMaxMeldScore(sorted, {});
+        const meldScore = (melds || []).length * 100;
+        return handScore + meldScore;
     }
 
     static findMaxMeldScore(tiles, memo = {}) {
@@ -1113,8 +1119,9 @@ class RobotAI {
             return true;
         });
 
-        const valBefore = RobotAI.evaluateHandValue(hand);
-        const valAfter = RobotAI.evaluateHandValue(tempHand);
+        // 碰前：手牌+现有melds；碰后：手牌少2张，melds多1组peng。
+        const valBefore = RobotAI.evaluateHandValue(hand, aiPlayer.melds);
+        const valAfter = RobotAI.evaluateHandValue(tempHand, [...aiPlayer.melds, { type: 'peng', tiles: [tile, tile, tile] }]);
         const netGain = (valAfter + 100) - valBefore;
 
         if (netGain >= 20 || targetStrategy.type === 'ALL_TRIPLETS') {
@@ -1142,6 +1149,97 @@ class RobotAI {
         const p = parseTile(tile);
         return p.suit === SUITS.ZHONG ? '红中' : `${p.num}${p.char}`;
     }
+
+    // 杠之前的评估。
+    //   - 暗杠不会被抢：只要结构损失不严重（>= -50）就杠；多成型1组面子通常都划算。
+    //   - 补杠可能被抢：按补杠牌位置分级评估被抢风险（中张 3-7 风险最高），
+    //     若自己未听牌 + 中张补杠，直接放弃（被抢 = 别人胡，自己少1张摸牌机会）。
+    static evaluateGangDecision(game, aiIdx, gangTile, gangType) {
+        const aiPlayer = game.players[aiIdx];
+        const hand = aiPlayer.hand;
+        const melds = aiPlayer.melds;
+        const parsed = parseTile(gangTile);
+        const tileName = RobotAI.tileName(gangTile);
+
+        const valBefore = RobotAI.evaluateHandValue(hand, melds);
+
+        let handAfter, meldsAfter;
+        if (gangType === 'angang') {
+            handAfter = hand.filter(t => t !== gangTile);
+            meldsAfter = [...melds, { type: 'angang', tiles: [gangTile, gangTile, gangTile, gangTile] }];
+        } else {
+            const idx = hand.indexOf(gangTile);
+            handAfter = [...hand];
+            handAfter.splice(idx, 1);
+            meldsAfter = melds.map(m =>
+                (m.type === 'peng' && m.tiles[0] === gangTile)
+                    ? { type: 'gang', tiles: [...m.tiles, gangTile] }
+                    : m
+            );
+        }
+        const valAfter = RobotAI.evaluateHandValue(handAfter, meldsAfter);
+        const structDelta = valAfter - valBefore;   // 已含“杠=1组面子=100分”的结构收益
+
+        let robRisk = 0;
+        let riskNote = '暗杠不可被抢';
+        if (gangType === 'bugang') {
+            // 抢杠胡：补杠牌只能作顺子一端（听牌家手牌不含补杠牌）
+            if (parsed.suit === SUITS.ZHONG) {
+                robRisk = 3;
+                riskNote = '红中不能作顺子，被抢概率极低';
+            } else if (parsed.num === 1 || parsed.num === 9) {
+                robRisk = 8;
+                riskNote = '1/9 边张只能作边张顺子一端，被抢概率较低';
+            } else if (parsed.num === 2 || parsed.num === 8) {
+                robRisk = 18;
+                riskNote = '2/8 可作两面顺子，被抢概率中等';
+            } else {
+                robRisk = 40;
+                riskNote = '3-7 中张可作多种顺子（两面/嵌张/边张），被抢概率较高';
+            }
+        }
+
+        // 杠后多摸1张新牌的期望价值（约等于一张能形成面子/对子的概率收益）
+        const drawValue = (gangType === 'bugang') ? 30 : 30;
+        const totalScore = structDelta + drawValue - robRisk;
+
+        const isMidTileRisk = (gangType === 'bugang'
+            && parsed.suit !== SUITS.ZHONG
+            && parsed.num >= 3 && parsed.num <= 7);
+
+        let shouldGang;
+        if (gangType === 'angang') {
+            shouldGang = structDelta >= -50;
+        } else {
+            // 补杠：综合分 > 0 才杠；中张补杠结构损失时更严格（structDelta < -50 直接放弃）
+            shouldGang = totalScore > 0 && !(isMidTileRisk && structDelta < -50);
+        }
+
+        const actionLabel = shouldGang
+            ? (gangType === 'angang' ? '✅ 执行暗杠' : '✅ 执行补杠')
+            : (gangType === 'angang' ? '⛔ 放弃暗杠' : '⛔ 放弃补杠');
+
+        const reason = shouldGang
+            ? (gangType === 'angang'
+                ? `暗杠 [${tileName}]：结构净变化${structDelta >= 0 ? '+' : ''}${structDelta}，暗杠不可被抢，收益明显。`
+                : `补杠 [${tileName}]：结构净变化${structDelta >= 0 ? '+' : ''}${structDelta}，被抢风险${robRisk}（${riskNote}），综合评分${totalScore}。`)
+            : (gangType === 'angang'
+                ? `放弃暗杠 [${tileName}]：结构损失${structDelta}过大，杠掉反而损害手牌结构。`
+                : `放弃补杠 [${tileName}]：被抢风险${robRisk}过高（${riskNote}），综合评分${totalScore}。`);
+
+        const detailHtml = `<div class="log-item">
+            <p style="color:${shouldGang ? '#2ecc71' : '#bdc3c7'}; font-weight:bold;">💥 杠评估：${actionLabel} [${tileName}]</p>
+            <p style="font-size:12px; color:#bbb; margin:4px 0;">${reason}</p>
+            <p style="font-size:11px; color:#888; margin:2px 0;">
+                杠前结构分：${valBefore}　杠后结构分：${valAfter}（净${structDelta >= 0 ? '+' : ''}${structDelta}）
+                ${gangType === 'bugang' ? `　被抢风险：${robRisk}` : ''}
+            </p>
+            ${gangType === 'bugang' ? `<p style="font-size:11px; color:#888;">风险分析：${riskNote}</p>` : ''}
+        </div>`;
+
+        return { shouldGang, structDelta, robRisk, totalScore, reason, detailHtml };
+    }
+
 
     // 找出一张牌在当前手牌里实际依附的对子/搭子/刻子。
     // 这部分只用于“解释”，不参与AI最终评分，避免把内部评分伪装成牌理。
@@ -1171,7 +1269,7 @@ class RobotAI {
 
     // 一张牌被打掉以后，下一次摸到哪些牌会直接形成新的对子/搭子/面子。
     // 这里统计“牌种类”而不是剩余张数，正对应用户想看的“未来摸牌路数”。
-    static getUsefulDraws(hand, melds = []) {
+    static getUsefulDraws(hand, melds = [], game = null, precomputedWinning = null) {
         const allPossible = [];
         ['wan', 'tong', 'tiao'].forEach(s => {
             for (let i = 1; i <= 9; i++) allPossible.push(`${i}${s}`);
@@ -1180,7 +1278,10 @@ class RobotAI {
 
         const counts = MahjongEvaluator.getCounts(hand);
         const useful = [];
-        const winning = [];
+        // winning：若调用方已算好（getTingInfo 的 tingTiles），直接复用，
+        // 避免 28 次重复 canSelfDrawHu 调用（性能优化关键点）
+        const winning = precomputedWinning ? [...precomputedWinning] : [];
+        const winningSet = new Set(winning);
         const meld = [];
         const tatsu = [];
         const pair = [];
@@ -1213,15 +1314,54 @@ class RobotAI {
                 gainedTatsu = exists(n - 1) || exists(n + 1) || exists(n - 2) || exists(n + 2);
             }
 
-            if (MahjongEvaluator.canSelfDrawHu(after, melds)) winning.push(t);
+            // 仅当没有预计算 winning 时才调用昂贵的 canSelfDrawHu（28 次/调用是性能大头）
+            if (!precomputedWinning) {
+                if (MahjongEvaluator.canSelfDrawHu(after, melds)) winning.push(t);
+            }
             if (gainedTriplet || (gainedSequence && after.length <= 14)) meld.push(t);
             else if (gainedTatsu) tatsu.push(t);
             else if (gainedPair) pair.push(t);
 
-            if (gainedTriplet || gainedSequence || gainedTatsu || gainedPair || winning.includes(t)) useful.push(t);
+            if (gainedTriplet || gainedSequence || gainedTatsu || gainedPair || winningSet.has(t)) useful.push(t);
         }
 
-        return { useful, winning, meld, tatsu, pair };
+        // 算期望张数：看牌局剩余可摸张数，过滤已打光的牌
+        // useful 数组只保留"剩余可摸>0"的牌；usefulWeighted 是所有有用牌的剩余张数总和
+        // 文案和评分都用这俩字段，保证一致
+        let usefulWeighted = 0;
+        const filteredUseful = [];
+        const filteredWinning = [];
+        for (const t of useful) {
+            const remaining = game ? RobotAI.countRemaining(game, hand, melds, t) : 4;
+            if (remaining > 0) {
+                filteredUseful.push(t);
+                usefulWeighted += remaining;
+            }
+        }
+        for (const t of winning) {
+            const remaining = game ? RobotAI.countRemaining(game, hand, melds, t) : 4;
+            if (remaining > 0) filteredWinning.push(t);
+        }
+
+        return { useful: filteredUseful, usefulWeighted, winning: filteredWinning, meld, tatsu, pair };
+    }
+
+    // 统计某张牌在全场已见张数（自己手牌+自己melds+全场弃牌+全场melds）
+    // 剩余可摸 = 4 - 已见（万筒条1-9各4张，红中4张）
+    // 别家手牌看不到，不算（未知）
+    static countRemaining(game, hand, melds, tile) {
+        let seen = 0;
+        seen += hand.filter(t => t === tile).length;
+        for (const m of melds) seen += (m.tiles || []).filter(t => t === tile).length;
+        if (game && game.players) {
+            for (const p of game.players) {
+                seen += (p.discards || []).filter(t => t === tile).length;
+                for (const m of (p.melds || [])) {
+                    seen += (m.tiles || []).filter(t => t === tile).length;
+                }
+            }
+        }
+        return Math.max(0, 4 - seen);
     }
 
     static namesForTiles(tiles) {
@@ -1235,14 +1375,16 @@ class RobotAI {
     }
 
     // 生成面向玩家的牌理解释：先比较留下的结构和进张，再给出推荐分。
-    static buildDiscardComparison(hand, melds, bestChoice, runnerUp) {
+    static buildDiscardComparison(hand, melds, bestChoice, runnerUp, game) {
         const bestHand = [...hand];
         bestHand.splice(bestHand.indexOf(bestChoice.tile), 1);
         const runnerHand = [...hand];
         runnerHand.splice(runnerHand.indexOf(runnerUp.tile), 1);
 
-        const bestDraws = this.getUsefulDraws(bestHand, melds);
-        const runnerDraws = this.getUsefulDraws(runnerHand, melds);
+        // 直接复用 evalList 里已算好的 drawsInfo（makeDecision 切牌评分时已算过）
+        // 避免重复调用 getUsefulDraws（性能优化）；bestChoice.drawsInfo 对应"打掉 bestChoice.tile 后的手牌"
+        const bestDraws = bestChoice.drawsInfo;
+        const runnerDraws = runnerUp.drawsInfo;
         const bestConnections = this.getTileConnections(hand, bestChoice.tile);
         const runnerConnections = this.getTileConnections(hand, runnerUp.tile);
         const bestName = bestChoice.tileName;
@@ -1262,16 +1404,16 @@ class RobotAI {
             html += `<p>• [${runnerName}] 本身也没有明显组合，因此两者的差异主要看打掉后留下的搭子和后续摸牌路线。</p>`;
         }
 
-        html += `<p>• 打出 [${bestName}] 后，能直接改善现有组合的牌包括 <b>${this.formatDrawList(bestDraws.useful, 8)}</b>，共 <b>${bestDraws.useful.length} 种牌</b>；其中可直接成胡的有 <b>${bestDraws.winning.length} 种</b>。</p>`;
-        html += `<p>• 打出 [${runnerName}] 后，对应的改善牌包括 <b>${this.formatDrawList(runnerDraws.useful, 8)}</b>，共 <b>${runnerDraws.useful.length} 种牌</b>；其中可直接成胡的有 <b>${runnerDraws.winning.length} 种</b>。</p>`;
+        html += `<p>• 打出 [${bestName}] 后，能直接改善现有组合的牌包括 <b>${this.formatDrawList(bestDraws.useful, 8)}</b>，期望可摸 <b>${bestDraws.usefulWeighted} 张</b>（已扣除全场已出的牌）；其中可直接成胡的有 <b>${bestDraws.winning.length} 种</b>。</p>`;
+        html += `<p>• 打出 [${runnerName}] 后，对应的改善牌包括 <b>${this.formatDrawList(runnerDraws.useful, 8)}</b>，期望可摸 <b>${runnerDraws.usefulWeighted} 张</b>；其中可直接成胡的有 <b>${runnerDraws.winning.length} 种</b>。</p>`;
 
-        const delta = bestDraws.useful.length - runnerDraws.useful.length;
+        const delta = bestDraws.usefulWeighted - runnerDraws.usefulWeighted;
         if (delta > 0) {
-            html += `<p>• 所以从牌面看，打 [${bestName}] 比打 [${runnerName}] 多保留 <b>${delta} 种</b>直接改善的摸牌路线，未来摸牌的选择更宽。</p>`;
+            html += `<p>• 所以从牌面看，打 [${bestName}] 比打 [${runnerName}] 多 <b>${delta} 张</b>期望可摸的改善牌，未来摸牌的选择更宽。</p>`;
         } else if (delta < 0) {
-            html += `<p>• 注意：打 [${bestName}] 的直接改善牌反而少 <b>${Math.abs(delta)} 种</b>，所以这次并不是“进张更多就一定更好”；真正的优势在于它没有像 [${runnerName}] 那样拆掉关键搭子。</p>`;
+            html += `<p>• 注意：打 [${bestName}] 的期望可摸改善牌反而少 <b>${Math.abs(delta)} 张</b>，所以这次并不是"进张更多就一定更好"；真正的优势在于它没有像 [${runnerName}] 那样拆掉关键搭子。</p>`;
         } else {
-            html += `<p>• 两种打法的直接改善牌数量相同，因此真正的区别在于：打 [${bestName}] 对现有搭子的破坏更小，保留下来的结构更完整。</p>`;
+            html += `<p>• 两种打法的期望可摸改善牌数量相同，因此真正的区别在于：打 [${bestName}] 对现有搭子的破坏更小，保留下来的结构更完整。</p>`;
         }
 
         // 推荐分只作为排序结果展示，不再拿它作为牌理解释。
@@ -1338,31 +1480,46 @@ class RobotAI {
 
             const counts = MahjongEvaluator.getCounts(hand);
             
+            // 暗杠：先评估结构损失，再决定是否杠（暗杠不可被抢，门槛低）
             for (const t in counts) {
                 if (counts[t] === 4) {
                     const parsed = parseTile(t);
                     const tileName = parsed.suit === SUITS.ZHONG ? '红中' : `${parsed.num}${parsed.char}`;
-                    return { 
-                        action: 'GANG', 
-                        gangType: 'angang', 
-                        tile: t, 
-                        reason: `手牌有四张 [${tileName}]，选择暗杠！`,
-                        detailHtml: `<div class="log-item"><p style="color:#2ecc71; font-weight:bold;">💥 决策：执行暗杠 [${tileName}]</p></div>`
-                    };
+                    const gangEval = RobotAI.evaluateGangDecision(game, aiIdx, t, 'angang');
+                    if (gangEval.shouldGang) {
+                        return { 
+                            action: 'GANG', 
+                            gangType: 'angang', 
+                            tile: t, 
+                            reason: gangEval.reason,
+                            detailHtml: gangEval.detailHtml
+                        };
+                    }
+                    // 评估为放弃：记录日志，继续走打牌流程（视为4张里有1张当孤张/搭子拆出）
+                    p.decisionLogs = p.decisionLogs || [];
+                    p.decisionLogs.push(gangEval.detailHtml);
+                    break;
                 }
             }
 
+            // 补杠：先评估被抢风险，再决定是否杠
             for (const t in counts) {
                 if (p.melds.some(m => m.type === 'peng' && m.tiles[0] === t)) {
                     const parsed = parseTile(t);
                     const tileName = parsed.suit === SUITS.ZHONG ? '红中' : `${parsed.num}${parsed.char}`;
-                    return { 
-                        action: 'GANG', 
-                        gangType: 'bugang', 
-                        tile: t, 
-                        reason: `摸到 [${tileName}]，选择补杠！`,
-                        detailHtml: `<div class="log-item"><p style="color:#2ecc71; font-weight:bold;">💥 决策：执行补杠 [${tileName}]</p></div>`
-                    };
+                    const gangEval = RobotAI.evaluateGangDecision(game, aiIdx, t, 'bugang');
+                    if (gangEval.shouldGang) {
+                        return { 
+                            action: 'GANG', 
+                            gangType: 'bugang', 
+                            tile: t, 
+                            reason: gangEval.reason,
+                            detailHtml: gangEval.detailHtml
+                        };
+                    }
+                    p.decisionLogs = p.decisionLogs || [];
+                    p.decisionLogs.push(gangEval.detailHtml);
+                    break;
                 }
             }
         }
@@ -1375,9 +1532,15 @@ class RobotAI {
             const tempHand = [...hand];
             tempHand.splice(tempHand.indexOf(t), 1);
             
-            const remainingMeldScore = RobotAI.evaluateHandValue(tempHand);
+            const remainingMeldScore = RobotAI.evaluateHandValue(tempHand, p.melds);
             const nextTing = MahjongEvaluator.getTingInfo(tempHand, p.melds);
             const effectiveTileCount = nextTing.tingTiles.length;
+            // 进张期望张数 + 听牌数：让 AI 优先选"打完能多听几张/更接近胡牌"的打法
+            // drawsInfo 同时供文案展示用，保证评分与文案一致
+            // 复用 getTingInfo 已算的 tingTiles 作为 winning，避免 getUsefulDraws 重复 28 次 canSelfDrawHu（性能优化）
+            const drawsInfo = RobotAI.getUsefulDraws(tempHand, p.melds, game, nextTing.tingTiles);
+            const usefulWeighted = drawsInfo.usefulWeighted;
+            const winCount = drawsInfo.winning.length;
             const parsed = parseTile(t);
             const tileName = parsed.suit === SUITS.ZHONG ? '红中' : `${parsed.num}${parsed.char}`;
             
@@ -1429,7 +1592,11 @@ class RobotAI {
                 }
             }
 
-            const totalEvalScore = remainingMeldScore * 10 + discardWeight;
+            // 评分公式：结构分×10 + 切牌权重 + 进张期望×15 + 听牌数×50
+            // - 结构分×10：保留原权重，是基础
+            // - 进张期望×15：让"打完能多摸几种有用牌"的打法加分（中盘主要驱动力）
+            // - 听牌数×50：接近胡牌时主导（听牌比进张重要得多）
+            const totalEvalScore = remainingMeldScore * 10 + discardWeight + usefulWeighted * 15 + winCount * 50;
 
             evalList.push({
                 tile: t,
@@ -1437,6 +1604,9 @@ class RobotAI {
                 count: counts[t],
                 remainingMeldScore,
                 effectiveTileCount,
+                usefulWeighted,
+                winCount,
+                drawsInfo,
                 discardWeight,
                 totalEvalScore,
                 tileCategory,
@@ -1465,10 +1635,10 @@ class RobotAI {
         detailHtml += `<div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:6px; margin-bottom:8px;">`;
         detailHtml += `<p style="color:#e74c3c; font-weight:bold; margin-bottom:4px;">❓ 为什么优先选择打出 [${bestChoice.tileName}]？</p>`;
         detailHtml += `<p style="color:#eee; font-size:12px;">• ${bestChoice.whyCutReason}</p>`;
-        
+
         if (evalList.length > 1) {
             const runnerUp = evalList[1];
-            detailHtml += this.buildDiscardComparison(hand, p.melds, bestChoice, runnerUp);
+            detailHtml += this.buildDiscardComparison(hand, p.melds, bestChoice, runnerUp, game);
         }
         detailHtml += `</div>`;
 
@@ -1489,7 +1659,7 @@ class RobotAI {
                                 <td style="padding:3px; color:${isSelected ? '#2ecc71' : '#fff'};">[${item.tileName}] ${isSelected ? '✅' : ''}</td>
                                 <td class="score" style="padding:3px; color:var(--accent-gold);">${item.totalEvalScore}</td>
                                 <td style="padding:3px; text-align:left;">${this.getTileConnections(hand, item.tile).slice(0, 3).join('；') || '孤张/无明显组合'}</td>
-                                <td style="padding:3px; color:#2ecc71; font-size:11px;">${this.formatDrawList(this.getUsefulDraws((() => { const h=[...hand]; h.splice(h.indexOf(item.tile),1); return h; })(), p.melds).useful, 5)}</td>
+                                <td style="padding:3px; color:#2ecc71; font-size:11px;">${this.formatDrawList(item.drawsInfo.useful, 5)}<br><span style="color:#888;">期望${item.drawsInfo.usefulWeighted}张${item.winCount ? `/听${item.winCount}种` : ''}</span></td>
                                </tr>`;
             }
         });
