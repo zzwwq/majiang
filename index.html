@@ -1168,6 +1168,26 @@ class RobotAI {
 
         const valBefore = RobotAI.evaluateHandValue(hand, melds);
 
+        // 七小对保护（仅暗杠+门清）：七小对进度=对子数+2×四张数（满分7）。
+        // 进度>=6 即最多差1对成七小对：胡牌期望(12~24×stake 总分)远超暗杠(6×stake)，且暗杠后非门清七小对永久不可胡，不可逆 → 放弃暗杠。
+        // 进度<=5 差2对以上，七小对期望低，按正常结构评估；补杠已有碰牌、七小对已不可能，无需保护。
+        if (gangType === 'angang' && melds.length === 0) {
+            const cnt = MahjongEvaluator.getCounts(hand);
+            let spProgress = 0;
+            for (const t in cnt) {
+                if (cnt[t] === 2) spProgress++;
+                else if (cnt[t] === 4) spProgress += 2;
+            }
+            if (spProgress >= 6) {
+                const reason = `放弃暗杠 [${tileName}]：门清七小对进度 ${spProgress}/7（最多差1对成七小对），七小对收益远高于暗杠，保七小对。`;
+                const detailHtml = `<div class="log-item">
+                    <p style="color:#bdc3c7; font-weight:bold;">🛡️ 杠评估：⛔ 放弃暗杠 [${tileName}]（七小对保护）</p>
+                    <p style="font-size:12px; color:#bbb; margin:4px 0;">${reason}</p>
+                </div>`;
+                return { shouldGang: false, structDelta: 0, robRisk: 0, totalScore: 0, reason, detailHtml };
+            }
+        }
+
         let handAfter, meldsAfter;
         if (gangType === 'angang') {
             handAfter = hand.filter(t => t !== gangTile);
