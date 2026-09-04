@@ -628,7 +628,7 @@
 
 <div id="app" data-page-node-id="XiBYuSZDC6rg8FdSSEM5Os">
     <header class="header" data-page-node-id="Ug7xMAxQ7PVFv1SNh3LnQR">
-        <div class="header-title" data-page-node-id="BhN3pLt5eHaEwFGRFnb1lh">🀄 县城麻将 · AI智能对战</div>
+        <div class="header-title" data-page-node-id="BhN3pLt5eHaEwFGRFnb1lh">🀄 浦城麻将 · AI智能对战</div>
         <div class="controls-group" data-page-node-id="KcxxeaZZo70QBiPsWYYphc">
             <select id="modeSelect" data-page-node-id="28KAqi1KivbeEZSEwCb6X3">
                 <option value="practice" data-page-node-id="NtAFuNHPkKEihBotkAqE3X">练习模式 (点击AI头像看决策全过程)</option>
@@ -857,7 +857,8 @@ class MahjongEvaluator {
     }
 
     static checkBigPairs(hand, melds) {
-        if (melds.some(m => m.type === 'angang' || m.type === 'zhigang' || m.type === 'minggang' || m.type === 'gang')) return false;
+        // 规则（2026-09-04 调整）：大对子(碰碰胡)允许含杠——补杠/暗杠/直接开杠均可，杠按一组刻子计。
+        // 杠后摸过补牌，暗手牌数 = 14 - 刻子数*3 依然成立（杠的第4张在 meld 里）。
         if ((hand.length + melds.length * 3) !== 14) return false;
         const counts = this.getCounts(hand);
         let pairCount = 0;
