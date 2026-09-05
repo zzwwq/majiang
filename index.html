@@ -622,6 +622,42 @@
                 overflow: visible;
             }
         }
+        /* ═══════ ★SVG牌面补丁（确认后原样搬进正式版）═══════
+           只替换牌面图案，不动任何牌框尺寸/布局样式 */
+        .tile.svg-face .tile-num, .tile.svg-face .tile-char { display: none; }
+        .tile .tile-face {
+            position: absolute;
+            left: 6%; top: 4%;
+            width: 88%; height: 92%;
+            pointer-events: none;
+        }
+
+        /* ═══════ 预览外壳（仅预览文件有，正式版不含）═══════ */
+        body { overflow: auto; flex-direction: column; }
+        .preview-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 999; background: #1a1a2e; padding: 8px 12px; display: flex; gap: 10px; align-items: center; font-size: 13px; border-bottom: 2px solid var(--accent-gold); flex-wrap: wrap; }
+        .preview-bar select, .preview-bar button { background: #16213e; color: #fff; border: 1px solid rgba(255,255,255,0.3); padding: 5px 10px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+        .preview-bar .hint { color: #aaa; font-size: 11px; }
+        #screenWrap { margin-top: 52px; border: 3px solid #f39c12; overflow: hidden; position: relative; box-shadow: 0 0 30px rgba(0,0,0,0.8); flex-shrink: 0; width: 1024px; height: 768px; }
+        #screenWrap #app { width: 100%; height: 100%; max-width: 100%; max-height: 100%; box-shadow: none; }
+        /* 字体候选对照面板（仅预览用） */
+        #fontPanel { position: fixed; right: 8px; top: 60px; z-index: 998; background: rgba(10,16,32,0.94); border: 2px solid #f39c12; border-radius: 8px; padding: 10px 12px; max-height: 82vh; overflow-y: auto; display: none; }
+        #fontPanel.show { display: block; }
+        #fontPanel h4 { color: #f39c12; margin: 0 0 8px; font-size: 13px; }
+        .font-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+        .font-sample { width: 46px; height: 64px; background: linear-gradient(160deg, #fffef8, #f0ead4); border-radius: 5px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.5); flex-shrink: 0; }
+        .font-sample .n { font-size: 21px; color: #1a1a1a; line-height: 1.05; font-weight: 900; }
+        .font-sample .w { font-size: 18px; color: #cf3a2b; line-height: 1.1; font-weight: 900; }
+        .font-row .lbl { color: #ddd; font-size: 11px; line-height: 1.35; }
+        .font-row .lbl b { color: #fff; font-size: 12px; }
+        #birdPanel { position: fixed; top: 60px; right: 325px; width: 330px; max-height: calc(100vh - 80px); overflow-y: auto; background: rgba(20,24,28,0.96); border: 1px solid #f39c12; border-radius: 8px; padding: 12px; display: none; z-index: 9999; }
+        #birdPanel.show { display: block; }
+        #birdPanel h4 { color: #f39c12; margin: 0 0 8px; font-size: 13px; }
+        .bird-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .bird-item { text-align: center; cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 6px; }
+        .bird-item.sel { border-color: #f39c12; background: rgba(243,156,18,0.12); }
+        .bird-item svg { width: 92px; height: 129px; background: linear-gradient(160deg, #fffef8, #f0ead4); border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+        .bird-item span { display: block; color: #ddd; font-size: 12px; margin-top: 4px; }
+        .bird-item.sel span { color: #f39c12; font-weight: bold; }
         </style>
 </head>
 <body data-page-node-id="8PAF2K0XFEKeECFsDbPIE6">
@@ -2801,15 +2837,152 @@ class MahjongGame {
         const gapClass = isDrawGap ? 'drawn-tile-gap' : '';
         const backClass = isAnGangBack ? 'angang-back' : '';
         const clickAttr = index >= 0 ? `onclick="game.selectTile(${index})"` : '';
+        /* ★SVG牌面补丁：暗杠背面不加正面图案，其余牌面追加 SVG 图案（文本节点保留但被 CSS 隐藏） */
+        const face = isAnGangBack ? '' : tileFaceSVG(t.suit, t.num);
 
         return `
-            <div class="tile ${smallClass} ${selectClass} ${gapClass} ${backClass}" data-suit="${t.suit}" ${clickAttr}>
+            <div class="tile ${smallClass} ${selectClass} ${gapClass} ${backClass} svg-face" data-suit="${t.suit}" ${clickAttr}>
                 <div class="tile-num">${t.num}</div>
                 ${t.char ? `<div class="tile-char">${t.char}</div>` : ''}
+                ${face}
             </div>
         `;
     }
 }
+
+/* ════════════════════════════════════════════════════════════
+   ★SVG牌面补丁（确认后原样搬进正式版）
+   用内置 SVG 复刻真实麻将牌面：筒=同心圆点阵、条=竹节/一条(鸟)、
+   万=蓝色数字+红色萬、中=红中。只替换牌面内容，
+   不改变牌框尺寸/边框/阴影/布局。老款手机无 SVG 场景极少，
+   所有主流浏览器(含 iOS Safari)均支持。 */
+const TILE_FACE_FONT = "'Kaiti SC','STKaiti','楷体',serif";
+const FACE_GREEN = '#1e6b4f', FACE_RED = '#cf3a2b', FACE_BLUE = '#2c3e63', FACE_DKGREEN = '#14503a';
+const CN_NUMS = { '1': '一', '2': '二', '3': '三', '4': '四', '5': '伍', '6': '六', '7': '七', '8': '八', '9': '九' };
+
+/* 筒：多重同心环点（粗环带、尽量占满牌面，照实物图） */
+function faceDot(x, y, r, c) {
+    return `<circle cx="${x}" cy="${y}" r="${r}" fill="#ffffff" stroke="${c}" stroke-width="${(r * 0.30).toFixed(1)}"/>` +
+        `<circle cx="${x}" cy="${y}" r="${(r * 0.56).toFixed(1)}" fill="none" stroke="${c}" stroke-width="${(r * 0.22).toFixed(1)}"/>` +
+        `<circle cx="${x}" cy="${y}" r="${(r * 0.24).toFixed(1)}" fill="${c}"/>`;
+}
+/* 一筒：按用户提供的 SVG 文档（一筒SVG.txt）绘制——绿双环+绿花环瓣、红色花心，缩放至占满牌面 */
+const ONEDOT_RING_D = "M55.4 43c-16.7 6.6-25.1 26.4-18 42.4 7.2 16.3 26.1 23.3 41.2 15.3 4.6-2.4 11.3-9.5 13.7-14.7 1.4-3 2.2-7.1 2.5-12.5.3-7 .1-8.8-2.2-13.6-6.8-15-23.3-22.4-37.2-16.9M71 44.3c13.9 3.9 22 14.2 22 28.2 0 11.3-7.5 22.7-17.6 27-5.4 2.2-17.5 2-22.4-.5-11.7-6-18.6-21.2-14.9-32.9 3.9-12 9.8-18.1 21.4-21.9 4-1.4 6.2-1.3 11.5.1";
+const ONEDOT_PETALS_D = "M54.6 49c-5.2 2.6-8.2 5.5-11.4 11-2.4 4-2.7 5.5-2.6 13 0 7.5.3 9 2.7 12.5 5.4 8.2 8.8 10.7 16.9 12.5 12.7 2.9 24.1-4 28.6-17.3 1.7-5.1 1.9-7.1 1.1-11.7-.4-3-1.4-6.6-2.1-8-1.9-4-9-11-12.7-12.6-4.9-2.1-15.7-1.7-20.5.6m11.8 1.3c1.3.9 1.6 2 1.1 4-.8 3.1-2.5 3.6-2.5.7 0-1.2-.7-2-1.6-2-1.1 0-1.4.5-1 1.6.3.9.3 2 0 2.5-.9 1.5-3.4-1.1-3.4-3.5 0-4.2 3.8-5.9 7.4-3.3m11.2 2.4c1.8 2.4 1.7 4.3-.3 6.5-2.4 2.6-3.3 2.2-2.6-1.2.6-3.1-1-4.3-2.1-1.5-1 2.7-2.9 1.7-2.1-1.2 1.1-4.5 4.7-5.7 7.1-2.6m-20.1 4.9c1.2 2.9 1.8 3.5 3.2 2.8 8.2-3.7 18.4 5 16.7 14.1-1.9 10.1-12.7 14.1-20.5 7.6-2.9-2.4-3.3-3.5-3.7-8.7-.4-5.3-.1-6.2 2.2-8.7l2.7-2.9-2.3-2.4c-1.3-1.3-2.6-2.4-3-2.4-1.4 0-.8 3.1.7 3.6 2 .8 1.9 2.4-.2 2.4-2.3 0-5.3-2.9-4.7-4.6.2-.8.6-2.1.9-2.9.2-.9 1.6-1.5 3.5-1.5 2.5 0 3.2.6 4.5 3.6m27.9 4.3c2.5 2.8.3 7.1-3.6 7.1-3.2 0-3.8-1.6-.8-2.5 1.1-.3 2-1 2-1.4 0-1.6-1.3-1.9-3.1-.8-2.6 1.6-3.6.1-1.4-2.3 2.3-2.5 4.7-2.6 6.9-.1m-33.6 3.5c.1.2 0 1-.4 1.9-.4 1.2-1.1 1.4-2.4.7-1.7-.9-3-.4-3 1.1 0 .4 1.1 1 2.5 1.3 3.6.9 3.1 2.6-.9 2.6-2.2 0-3.6-.6-4-1.6-1.8-4.6.8-7.9 5.4-6.8 1.4.3 2.6.7 2.8.8m35.4 9.1c.9 2.1.8 2.8-.7 4.5-2 2.3-4.5 2.6-6.3.8-1.9-1.9-1.4-2.8 1.3-2.8 3 0 3.3-1.6.4-2.3-2.7-.7-1.5-2.7 1.7-2.7 1.6 0 2.8.8 3.6 2.5m-36.2 2c0 .8-.9 1.9-2 2.5-2.7 1.4-1.7 2.9 1.5 2.2 1.4-.2 2.5-.1 2.5.3 0 1.2-3.3 3.4-5.1 3.5-4.4.1-4.9-7.3-.6-9 3.1-1.3 3.7-1.2 3.7.5m29.1 6.4c1.6 1.5 1.9 2.6 1.4 5-.5 2.5-1.2 3.1-3.4 3.1-3.1 0-5.1-1.6-5.1-4.2 0-2.2.8-2.3 3.2-.1 2 1.8 3.9 1 2-.9-1.2-1.2-1.7-4.8-.7-4.8.3 0 1.5.9 2.6 1.9M55.8 87c-1.6 2.6-.3 3.7 2 1.7 2.2-2 3.2-2.1 3.2-.4 0 2.2-2.3 4.5-5.1 5.2-2.1.5-2.7.1-3.7-2-1.4-3.1.2-6.5 3-6.5 1.6 0 1.6.3.6 2m15.4 2c0 1.1.1 2.3.2 2.7.1.5-.7 1.9-1.6 3.2-1.6 2.3-1.8 2.3-4.2.7-1.8-1.1-2.6-2.5-2.6-4.6 0-3.7 1.7-3.9 2.6-.5.7 2.9 2.8 2.8 3-.1.3-3.2.4-3.4 1.4-3.4.6 0 1.1.9 1.2 2";
+const ONEDOT_CENTER_D = "M60.7 64.1c-5.2 3-5.8 12.1-1 15.9 6.7 5.2 16.9-1.3 14.9-9.5-1.5-5.9-8.9-9.3-13.9-6.4m9.1 1.8c2.1 1.3 1 4.6-1.6 4.9-2.3.3-2.8-1.1-1.6-4.2.7-1.8 1.3-1.9 3.2-.7M63.5 69c0 1.6-.6 2.6-1.8 2.8-1.9.4-3.2-2-2.3-4.4.9-2.5 4.1-1.3 4.1 1.6m8.3 5.7c.7 1.1.5 2.1-.4 3.1-2 2-4.4.7-4.4-2.3s3.3-3.5 4.8-.8m-7.1.8c.6 1.9-2.1 4.6-4 3.9-2-.7-2.3-4-.4-4.7 1.8-.8 4-.4 4.4.8";
+function faceOneDotSvg() {
+    const tf = 'transform="translate(-51.68 -43.74) scale(1.5667)"';
+    return '<g ' + tf + '><path d="' + ONEDOT_RING_D + '" fill="' + FACE_GREEN + '"/></g>' +
+        '<g ' + tf + '><path d="' + ONEDOT_PETALS_D + '" fill="' + FACE_GREEN + '"/></g>' +
+        '<g ' + tf + '><path d="' + ONEDOT_CENTER_D + '" fill="' + FACE_RED + '"/></g>';
+}
+
+/* 条：高棍（3 球花生链，用于 2-5 条），照实物图 */
+function faceStick(x, y, H, c = FACE_GREEN, sRatio = 0.62) {
+    const R = H / 6.3, w0 = 0.62 * R, p = v => v.toFixed(1);
+    const d = `M 0 ${p(-3 * R)}` +
+        ` C ${p(0.85 * R)} ${p(-3 * R)} ${p(R)} ${p(-2.5 * R)} ${p(R)} ${p(-2 * R)}` +
+        ` C ${p(R)} ${p(-1.5 * R)} ${p(0.75 * R)} ${p(-1.35 * R)} ${p(w0)} ${p(-R)}` +
+        ` C ${p(0.75 * R)} ${p(-0.65 * R)} ${p(R)} ${p(-0.5 * R)} ${p(R)} 0` +
+        ` C ${p(R)} ${p(0.5 * R)} ${p(0.75 * R)} ${p(0.65 * R)} ${p(w0)} ${p(R)}` +
+        ` C ${p(0.75 * R)} ${p(1.35 * R)} ${p(R)} ${p(1.5 * R)} ${p(R)} ${p(2 * R)}` +
+        ` C ${p(R)} ${p(2.5 * R)} ${p(0.85 * R)} ${p(3 * R)} 0 ${p(3 * R)}` +
+        ` C ${p(-0.85 * R)} ${p(3 * R)} ${p(-R)} ${p(2.5 * R)} ${p(-R)} ${p(2 * R)}` +
+        ` C ${p(-R)} ${p(1.5 * R)} ${p(-0.75 * R)} ${p(1.35 * R)} ${p(-w0)} ${p(R)}` +
+        ` C ${p(-0.75 * R)} ${p(0.65 * R)} ${p(-R)} ${p(0.5 * R)} ${p(-R)} 0` +
+        ` C ${p(-R)} ${p(-0.5 * R)} ${p(-0.75 * R)} ${p(-0.65 * R)} ${p(-w0)} ${p(-R)}` +
+        ` C ${p(-0.75 * R)} ${p(-1.35 * R)} ${p(-R)} ${p(-1.5 * R)} ${p(-R)} ${p(-2 * R)}` +
+        ` C ${p(-R)} ${p(-2.5 * R)} ${p(-0.85 * R)} ${p(-3 * R)} 0 ${p(-3 * R)} Z`;
+    return `<g transform="translate(${x} ${y})">` +
+        `<path d="${d}" fill="#ffffff" stroke="${c}" stroke-width="${(R * sRatio).toFixed(1)}" stroke-linejoin="round"/>` +
+        `<line x1="0" y1="${p(-2.35 * R)}" x2="0" y2="${p(2.35 * R)}" stroke="${c}" stroke-width="${(R * sRatio * 0.58).toFixed(1)}" stroke-linecap="round"/>` +
+        `</g>`;
+}
+/* 条：矮胖花生（2 球鼓包，用于 6/7/9 条），照实物图 */
+function faceStickFat(x, y, W, H, c = FACE_GREEN) {
+    const w = W / 2, h = H / 2, ws = 0.55 * w, p = v => v.toFixed(1);
+    const d = `M 0 ${p(-h)}` +
+        ` C ${p(0.8 * w)} ${p(-h)} ${p(w)} ${p(-0.68 * h)} ${p(w)} ${p(-0.42 * h)}` +
+        ` C ${p(w)} ${p(-0.2 * h)} ${p(ws)} ${p(-0.24 * h)} ${p(ws)} 0` +
+        ` C ${p(ws)} ${p(0.24 * h)} ${p(w)} ${p(0.2 * h)} ${p(w)} ${p(0.42 * h)}` +
+        ` C ${p(w)} ${p(0.68 * h)} ${p(0.8 * w)} ${p(h)} 0 ${p(h)}` +
+        ` C ${p(-0.8 * w)} ${p(h)} ${p(-w)} ${p(0.68 * h)} ${p(-w)} ${p(0.42 * h)}` +
+        ` C ${p(-w)} ${p(0.2 * h)} ${p(-ws)} ${p(-0.24 * h)} ${p(-ws)} 0` +
+        ` C ${p(-ws)} ${p(-0.24 * h)} ${p(-w)} ${p(-0.2 * h)} ${p(-w)} ${p(-0.42 * h)}` +
+        ` C ${p(-w)} ${p(-0.68 * h)} ${p(-0.8 * w)} ${p(-h)} 0 ${p(-h)} Z`;
+    return `<g transform="translate(${x} ${y})">` +
+        `<path d="${d}" fill="#ffffff" stroke="${c}" stroke-width="${(w * 0.30).toFixed(1)}" stroke-linejoin="round"/>` +
+        `<line x1="0" y1="${p(-0.6 * h)}" x2="0" y2="${p(0.6 * h)}" stroke="${c}" stroke-width="${(w * 0.15).toFixed(1)}" stroke-linecap="round"/>` +
+        `</g>`;
+}
+/* 8条：按用户提供的 SVG 文档（八条SVG.txt）绘制——上倒M下正M空心描边，绿色，缩放至占满牌面 */
+const EIGHTM_D = "M184.5 190.6c-12 2.9-19.3 9.8-20.9 19.9-.7 4.4 2.3 18.2 4.9 22.2 2.1 3.2 1.9 5.7-1 9.9-6.7 9.9-7.1 23.9-1 36.6l1.8 3.8-4.1 8.3c-3.6 7.1-4.2 9.2-4.2 14.7 0 14.2 9.9 23.8 25.5 24.8 9.4.6 15.7-2 22.4-9.4 4.7-5.1 9.1-14 9.1-18.3 0-3.6 3.3-6.1 10-7.7 12.4-2.9 17.9-7.7 24.1-20.9 2-4.5 4.5-8.7 5.5-9.5 2.1-1.8 11.9-1.9 15.1-.2 1.3.7 3.2 3.9 4.8 8.2 1.8 4.8 4.3 8.8 7.7 12.6 5.9 6.4 8.4 7.9 16.8 9.8 7.5 1.8 8.7 2.7 10.1 8 1.9 7.1 7 16.5 11.2 20.2 10.2 9.3 24.3 10 36.6 1.9 6.2-4.2 9.6-10.6 9.6-18.5 0-5.6-.6-7.7-4.3-15.4l-4.2-8.8 1.9-3.2c1-1.7 2.6-6.4 3.6-10.5 2.2-9.1 1.1-15.3-4.2-25-3.3-6-3.5-6.7-2.3-9.5 6.7-16 7.4-22.4 3.5-30.3-3.1-6.1-7.6-9.8-15.3-12.5-15.3-5.4-31.2 5.1-31.2 20.6 0 7 2.3 15.8 5.7 21.3l3.5 5.8-2.1 6.6c-2.1 6.6-5.1 10.9-7.5 10.9-.7 0-2.6-1-4.1-2.3-1.6-1.2-5.4-3.6-8.4-5.2-5-2.7-5.8-3.5-7.6-8.5-6-16.6-16.2-24.4-31.5-24.4-14.7.1-26.8 8.9-30.7 22.4-1.9 6.9-2.5 7.6-8.7 10.7-2.8 1.4-6.5 3.7-8.3 5-4.3 3.3-6.4 2.7-9-2.7-3.2-6.6-3.9-12.4-1.8-15.6.9-1.4 2.7-5.5 4.1-9 5.5-14.6 1.5-28.7-9.7-34.4-3.8-2-11.9-3.2-15.4-2.4m160.3 16.1c1.2 2.3 1.5 98.8.4 102.8-.7 2.4-1.4 3-3.5 3-2 0-6.4-3.6-19.3-16-9.2-8.8-25.7-24.7-36.8-35.2-11.1-10.6-20.7-19.3-21.4-19.3-1.4 0-4.1 2.4-46 42.5-15.6 14.8-29.5 27.4-30.9 28-5.3 2-5.3 1.9-5.1-53.8.3-47.3.4-51.1 2.1-52.1 1.2-.8 2.2-.8 3.5 0 1.6 1 1.7 4.6 2.2 45.2.3 24.2.8 44.4 1.2 44.8 1.6 1.6 6.2-2.1 23-18.3 45.5-44 46.9-45.3 49.3-45.3 3 0 6 2.5 23.5 19.5 37.5 36.4 46.3 44.6 47.9 44.3 2.3-.4 2.7-7.6 3-52 .1-24.2.6-37.7 1.3-38.5 1.5-1.9 4.6-1.6 5.6.4M175.6 357.5c-10.8 4.4-15.6 11.2-15.6 21.8 0 5.6.6 7.6 4.1 14.7l4.1 8.2-2.8 6.1c-2.5 5.4-2.9 7.4-2.9 15.3 0 8.5.2 9.5 3.8 16.5 2 4.1 3.7 8 3.7 8.7s-.9 3.1-2 5.3c-1.2 2.2-2.8 7.1-3.6 10.9-2.9 12.6 1.3 22 11.8 27 8.3 4 12.6 4.5 19.5 2.5 13.9-4 19.7-18.3 14.2-34.8-1.1-3.4-3-7.7-4.1-9.5-1.5-2.5-1.9-4.4-1.5-7.3.8-5.7 4.8-13.3 7.2-13.7 1.1-.1 4.4 1.5 7.4 3.8 2.9 2.2 5.8 4 6.4 4 2.2 0 7.7 5.2 7.7 7.3 0 3.8 4.6 12 9.1 16.4 6.5 6.2 12.3 8.4 22.2 8.4 7.3 0 8.9-.4 14.7-3.3 7.4-3.8 13.2-10.5 15.4-18 2.2-7.1 3.4-8.8 7.9-10.7 2.3-1 5.9-3.3 8.1-5 2.1-1.7 4.5-3.1 5.3-3.1 2.4 0 6 4.8 7.8 10.7 1.7 5.5 1.7 5.8 0 8.7-9.1 15-9.9 29.8-2.3 39 8 9.8 23.8 10.8 34.9 2.3 9.2-7 11-18.6 5.1-32.7-1.8-4.1-3.2-8-3.2-8.7s1.3-3.3 2.9-5.8 3.7-7.6 4.6-11.4c1.5-6.1 1.5-7.4.1-13.2-.8-3.5-2.4-8.6-3.5-11.2l-2.1-4.8 2.3-3.7c4-6.4 5.7-12 5.7-18.7 0-7.6-.8-10.1-5.1-15-4.6-5.2-12-8.7-20-9.3-5.7-.4-7.5-.1-12.8 2.3-9.5 4.3-13.1 9.1-19.7 26-1.8 4.5-2.4 5.1-6.4 6.3-15.6 4.6-21.7 9.6-27.6 22.7-4.1 9.2-5.7 10.5-12.7 10.5-6 0-8.2-2-12.6-11.3-2.1-4.5-5.5-9.9-7.5-12-4.3-4.3-11.4-8.1-17.1-9.1-6-1.1-8.1-2.9-9.4-8.2-4.1-16.1-16.4-27.4-29.8-27.4-3.8 0-7.8.9-11.7 2.5m15 19.4c1.4 1.1 14.3 13.4 28.7 27.4 36.2 35 43.4 41.7 44.8 41.7.6 0 7.5-6.2 15.3-13.7 61.8-60 62.7-60.8 65.6-55.4 1.5 2.9 1.4 100.2-.2 103.6-1.2 2.7-3.6 3.3-5.6 1.3-.9-.9-1.2-12.2-1.2-44.8 0-45.7-.3-48.7-4.2-46.4-1.8 1-11.6 10.3-43.1 40.8-12.1 11.6-23 21.7-24.4 22.4-4.2 2.3-.8 5.1-45.6-38.3-24-23.1-28.3-26.9-29.9-25.9-.5.3-.8 20.5-.8 44.8 0 42-.1 44.5-1.9 46.7-1.6 2-2.1 2.1-3.5 1-1.4-1.2-1.6-6.7-1.6-53.6 0-28.7.3-52.5.7-52.8 1.2-1.3 4.5-.7 6.9 1.2";
+function faceEightMSvg() {
+    return '<g transform="translate(-62.52 -76.03) scale(0.4258)"><path d="' + EIGHTM_D + '" fill="' + FACE_GREEN + '"/></g>';
+}
+
+/* 一条：传统"一条(鸟)"——圆头红眼、两侧垂翅、条纹身、长尾，照实物图 */
+/* 一条：按用户提供的 SVG 文档（一条SVG.txt）绘制——绿色线条鸟、红眼，缩放至占满牌面 */
+const BIRD_BODY_D = "M87.3 72.6c-1.6 2.5-1.6 2.8.5 6.4 1.1 2.1 1.9 4 1.5 4.3-.3.4-2.5.4-4.9 0-3.6-.5-4.4-.3-4.4 1 0 1 1.1 1.7 3.3 1.9 4.5.4 4.5 3.8 0 5-5.2 1.3-6.7 4.6-5.9 12.8.3 3.8 1.5 9.3 2.7 12.1l2 5.2-2.1 2.1-2.1 2.1-2.7-3.2c-1.5-1.7-3.4-4.2-4.3-5.4-1.4-2.1-1.9-2.2-4.2-1.2-3.4 1.6-4.3 4.8-2.3 7.9 1.4 2 2.3 2.4 5.8 2.2 6-.4 6.3 2.2.6 6.1-7.8 5.5-8.3 5.9-7.6 6.6 1.4 1.4 9.7-3.7 13.3-8.1 2.1-2.5 4.2-4.3 4.8-4.1.5.1 1.8 4.3 2.8 9.3 2 9.9 6.6 23.4 8 23.4 1.3 0 1.1-2.2-.7-7.1-3.9-11-6.7-27.9-4.6-27.9 1.9 0 3.2 2.7 3.2 6.4 0 4.1 3.5 18.3 6.4 26.4 2.5 7 9.5 19.8 12.1 22.2 3.2 3 3.2 1.3.1-4.8-2.7-5-6.1-18.9-7.1-28.5-.5-4.7-1-5.8-2.3-5.5-1.7.3-1.9 3.2-.6 10.3 1.3 6.6-1.4.6-3.4-7.5-2.7-11.3-3.4-17.2-1.9-16.7.7.2 1.4 2.3 1.7 4.7.7 6.4 3 6.5 3 .1 0-4.4.3-5.1 2-5.1s2 .7 2 4.4c0 4.1 1.3 6.6 2.7 5.2.3-.3.8-2.8 1.1-5.6.4-4.7 1.6-6.9 2.9-5.7.2.3-.3 5-1.2 10.4-1.2 6.8-1.5 12.2-1.1 17.8 1 12.1 4.1 22.3 6.1 20.3.4-.3 0-3.2-.8-6.4-3.2-13-2.8-27.8 1.1-40.8l1.8-5.9 5.7-1.9c4.2-1.4 6.3-1.6 7.7-.8 2.8 1.5 6.8-.4 7.6-3.6.9-3.6-.7-5.8-4.4-6.2-2.7-.3-3.5.2-5.3 3.2-2 3.5-5.1 5.1-8.2 4.4-1.2-.2-1-1.5 1.5-6.8 1.6-3.6 3.2-8.8 3.5-11.5.4-4.2.2-5.3-1.6-6.9-1.9-1.7-2.2-1.8-4.5-.2-3 1.9-3.6 2-3.6.3 0-.7-.9-3-2-5.2-2.4-4.8-2.5-5.5-.2-5.5 2.6-.1 10.4-3.9 9.8-4.8-.3-.5-2.9-.1-5.8.9s-6.7 1.8-8.4 1.9c-3 0-11.7-4.1-12.9-6.1-1.2-1.8-4.5-.9-6.2 1.7m7.6 2.5c2.8 2.3 2.6 2.7-1.7 3.5-3.4.7-5-1.1-3.8-4.1.7-2 2.6-1.8 5.5.6m9.4 6c5.6 2.5 8.2 13.9 4.1 17.9-4.5 4.6-14.1 3.4-16.9-2.1-5.1-9.8 3.3-20.1 12.8-15.8m15.4 15.8c-.2 2.5-1.5 6.8-2.7 9.6l-2.3 5-1.4-3.9c-.7-2.1-1.8-4.5-2.4-5.3-.9-1-.8-1.8.5-3.1.9-1 1.6-2.5 1.6-3.3 0-1.7 5-5 6.3-4.2.5.3.7 2.6.4 5.2m-31.3.6 2.5 4.6-1.9 3.4c-1 1.8-2.4 5.2-3.1 7.4-.7 2.3-1.5 4.1-1.9 4.1-1.2 0-4-10.7-4-15.3 0-3.4.6-5.3 2-6.7 2.8-2.8 3.5-2.6 6.4 2.5m21.4 9c.6 1.3 1.4 4.6 1.8 7.2l.6 4.8-4.6 2.3c-6.8 3.3-21.4 2.7-20.9-.9.4-3.2 4.5-13.5 5.8-14.8 1.9-1.9 3.2-.6 1.5 1.4-.9 1.1-1 1.9-.2 2.7.7.7 1.4.4 2.4-1.1 1.8-2.9 2.6-2.6 3 1.1.4 4.4 2.2 3.8 2.9-.9l.5-3.8 1.4 2.7c.7 1.6 1.7 2.8 2.2 2.8 1.2 0 1-3.8-.2-4.5-1.4-.9-.2-2.5 1.4-1.9.7.3 1.8 1.6 2.4 2.9m24.2 5c0 2-3.9 4-5.2 2.7-.6-.6-.8-1.8-.5-2.6.8-2 5.7-2.1 5.7-.1m-63.2 8.8c.4 2-2.5 3.4-4 1.9s-.1-4.4 1.9-4c1 .2 1.9 1.1 2.1 2.1";
+const BIRD_EYE_D = "M97.2 85.6c-2.7 1.8-2.9 5.5-.4 7.7 2.4 2.2 4.5 2.1 6.5-.1 2.2-2.4 2.1-5.5-.1-7.5-2.3-2.1-3.2-2.1-6-.1";
+const BIRD_DOTS_D = "M83 99.5c0 1 .7 1.5 1.8 1.3 2.1-.4 1.9-2.2-.2-2.6-1-.2-1.6.3-1.6 1.3m.5 5.5c-1.1 1.7.5 3.2 2.1 1.9.8-.6 1.4-1.5 1.4-2 0-1.2-2.7-1.1-3.5.1";
+function birdSvg() {
+    const tf = 'transform="translate(-66.97 -77.31) scale(1.1766)"';
+    return '<g ' + tf + '><path d="' + BIRD_BODY_D + '" fill="' + FACE_GREEN + '"/></g>' +
+        '<g ' + tf + '><path d="' + BIRD_EYE_D + '" fill="' + FACE_RED + '"/></g>' +
+        '<g ' + tf + '><path d="' + BIRD_DOTS_D + '" fill="' + FACE_GREEN + '"/></g>';
+}
+const BIRD_VARIANTS = [birdSvg];
+let BIRD_STYLE = 0;
+function faceBird() { return BIRD_VARIANTS[BIRD_STYLE](); }
+window.__bird = { variants: BIRD_VARIANTS, set: i => { BIRD_STYLE = i; }, get: () => BIRD_STYLE };
+
+function tileFaceSVG(suit, num) {
+    num = String(num);
+    let inner = '';
+    if (suit === 'tong') {
+        switch (num) {
+            case '1': inner = faceOneDotSvg(); break;
+            case '2': inner = faceDot(50, 43, 25, FACE_BLUE) + faceDot(50, 97, 25, FACE_GREEN); break;
+            case '3': inner = faceDot(28, 36, 16.5, FACE_BLUE) + faceDot(50, 70, 16.5, FACE_RED) + faceDot(72, 104, 16.5, FACE_GREEN); break;
+            case '4': inner = faceDot(31, 43, 17, FACE_GREEN) + faceDot(69, 43, 17, FACE_BLUE) + faceDot(31, 97, 17, FACE_BLUE) + faceDot(69, 97, 17, FACE_GREEN); break;
+            case '5': inner = faceDot(30, 42, 14.5, FACE_GREEN) + faceDot(70, 42, 14.5, FACE_BLUE) + faceDot(50, 70, 14.5, FACE_RED) + faceDot(30, 98, 14.5, FACE_BLUE) + faceDot(70, 98, 14.5, FACE_GREEN); break;
+            case '6': inner = faceDot(30, 32, 15.5, FACE_GREEN) + faceDot(70, 32, 15.5, FACE_GREEN) +
+                faceDot(30, 78, 13.5, FACE_RED) + faceDot(70, 78, 13.5, FACE_RED) +
+                faceDot(30, 110, 13.5, FACE_RED) + faceDot(70, 110, 13.5, FACE_RED); break;
+            case '7': inner = faceDot(26, 26, 12.5, FACE_GREEN) + faceDot(50, 42, 12.5, FACE_GREEN) + faceDot(74, 58, 12.5, FACE_GREEN) +
+                faceDot(31, 90, 13, FACE_RED) + faceDot(69, 90, 13, FACE_RED) + faceDot(31, 116, 13, FACE_RED) + faceDot(69, 116, 13, FACE_RED); break;
+            case '8': [26, 55, 85, 114].forEach(y => { inner += faceDot(31, y, 13.5, FACE_BLUE) + faceDot(69, y, 13.5, FACE_BLUE); }); break;
+            case '9': [32, 70, 108].forEach((y, i) => {
+                const c = [FACE_BLUE, FACE_RED, FACE_GREEN][i];
+                inner += faceDot(26, y, 13, c) + faceDot(50, y, 13, c) + faceDot(74, y, 13, c);
+            }); break;
+        }
+    } else if (suit === 'tiao') {
+        switch (num) {
+            case '1': inner = faceBird(); break;
+            case '2': inner = faceStick(50, 38, 58) + faceStick(50, 102, 58); break;
+            case '3': inner = faceStick(50, 34, 52) + faceStick(29, 104, 56) + faceStick(71, 104, 56); break;
+            case '4': inner = faceStick(29, 38, 58) + faceStick(71, 38, 58) + faceStick(29, 102, 58) + faceStick(71, 102, 58); break;
+            case '5': inner = faceStick(29, 33, 48) + faceStick(71, 33, 48) + faceStick(50, 70, 48, FACE_RED) + faceStick(29, 107, 48) + faceStick(71, 107, 48); break;
+            case '6': [42, 98].forEach(y => { inner += faceStick(26, y, 50) + faceStick(50, y, 50) + faceStick(74, y, 50); }); break;
+            case '7': inner = faceStick(50, 24, 34, FACE_RED);
+                [68, 112].forEach(y => { inner += faceStick(26, y, 38) + faceStick(50, y, 38) + faceStick(74, y, 38); }); break;
+            case '8': inner = faceEightMSvg(); break;
+            case '9': [28, 70, 112].forEach(y => { inner += faceStick(26, y, 36) + faceStick(50, y, 36, FACE_RED) + faceStick(74, y, 36); }); break;
+        }
+    } else if (suit === 'wan') {
+        const cn = CN_NUMS[num] || num;
+        
+        inner = `<text x="50" y="66" text-anchor="middle" style="font-family:${TILE_FACE_FONT};" font-weight="900" font-size="66" fill="#1a1a1a">${cn}</text>` +
+            `<text x="50" y="130" text-anchor="middle" style="font-family:${TILE_FACE_FONT};" font-weight="900" font-size="56" fill="${FACE_RED}">萬</text>`;
+    } else if (suit === 'zhong') {
+        inner = `<text x="50" y="112" text-anchor="middle" style="font-family:${TILE_FACE_FONT};" font-weight="900" font-size="110" fill="${FACE_RED}">中</text>`;
+    }
+    if (!inner) return '';
+    return `<svg class="tile-face" viewBox="0 0 100 140" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${inner}</svg>`;
+}
+/* ════════════ ★SVG牌面补丁结束 ════════════ */
 
 let game = null;
 
