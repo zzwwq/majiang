@@ -2195,20 +2195,12 @@ class MahjongGame {
             document.getElementById('turnIndicator').innerText = "流局 (牌墙摸完)";
             document.getElementById('btnStart').innerText = "再来一局";
 
-            const gangDiffs = this.calculateFinalGangScores();
-            this.players.forEach((p, idx) => {
-                p.score += gangDiffs[idx];
-            });
-            this.score = this.players[0].score;
-            this.saveStorage();
-
+            // 规则（2026-09-05 调整）：流局不结算杠分，各家分数不变（杠分只在胡牌时随本局结算）。
             let detailHtml = `<div style="font-size: 14px; font-weight: bold; color: var(--accent-gold); margin-bottom: 10px;">🀄 牌墙已摸完，本局流局(荒庄)！</div>`;
-            detailHtml += `<div style="margin-bottom: 8px;"><b>杠分结算变动：</b></div>`;
-            this.players.forEach((p, idx) => {
-                const gDiff = gangDiffs[idx];
-                const gStr = gDiff > 0 ? `+${gDiff}` : `${gDiff}`;
-                detailHtml += `<div class='settle-row'><span>${p.name}</span><span style='color:${gDiff >= 0 ? '#2ecc71' : '#e74c3c'}; font-weight: bold;'>${gStr} 分</span></div>`;
-            });
+            if (this.currentRoundGangs && this.currentRoundGangs.length > 0) {
+                detailHtml += `<div style="margin-bottom: 8px; color:#bbb;">本局产生的杠分因流局不计入。</div>`;
+            }
+            detailHtml += `<div style="margin-bottom: 8px;">本局无胜负，各家分数不变。</div>`;
 
             showModal("🤝 流局结算", detailHtml);
             this.updateUI();
