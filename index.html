@@ -2567,7 +2567,7 @@ class MahjongGame {
         }
     }
 
-    // 补杠前最后检查抢杠胡；此时碰牌仍保持peng状态，补杠牌仍在杠家手里。
+    // ★抢杠时序补丁：先检查抢杠胡（判定仍用碰牌未变杠的原始状态），再亮杠，最后延迟弹抢杠胡选择。
     tryBuGang(gangPlayerIdx, tile) {
         if (this.gameState !== 'PLAYING') return false;
 
@@ -2598,44 +2598,56 @@ class MahjongGame {
 
         this.pendingQiangGang = { gangPlayerIdx, tile, winners: winners.slice() };
 
+        // ★抢杠时序补丁：先亮杠（音效+碰变杠+公告"💥 补杠"），800ms 后再弹抢杠胡选择，符合真实麻将"先亮第4张、再问胡不胡"的因果顺序。
+        this.revealBuGang(gangPlayerIdx, tile);
+
         if (winners.includes(0)) {
             const other = winners.filter(i => i !== 0);
             const otherText = other.length ? `；${other.map(i => this.players[i].name).join('、')}也满足抢杠胡条件` : '';
-            const actionBar = document.getElementById('actionBar');
-            const btnHu = document.getElementById('btnHu');
-            const btnGang = document.getElementById('btnGang');
-            const btnPeng = document.getElementById('btnPeng');
-            const btnDiscard = document.getElementById('btnDiscard');
-            const btnPass = document.getElementById('btnPass');
-            btnHu.innerText = '抢杠胡';
-            btnHu.style.display = 'flex';
-            btnGang.style.display = 'none';
-            btnPeng.style.display = 'none';
-            btnDiscard.style.display = 'none';
-            btnPass.style.display = 'flex';
-            actionBar.style.display = 'flex';
-            this.announceAction(`⚠️ ${gangPlayer.name} 补杠 [${tileName}]：你满足抢杠胡${otherText}！`);
+            setTimeout(() => {
+                if (this.gameState === 'PLAYING' && this.pendingQiangGang && this.pendingQiangGang.tile === tile) {
+                    const actionBar = document.getElementById('actionBar');
+                    const btnHu = document.getElementById('btnHu');
+                    const btnGang = document.getElementById('btnGang');
+                    const btnPeng = document.getElementById('btnPeng');
+                    const btnDiscard = document.getElementById('btnDiscard');
+                    const btnPass = document.getElementById('btnPass');
+                    btnHu.innerText = '抢杠胡';
+                    btnHu.style.display = 'flex';
+                    btnGang.style.display = 'none';
+                    btnPeng.style.display = 'none';
+                    btnDiscard.style.display = 'none';
+                    btnPass.style.display = 'flex';
+                    actionBar.style.display = 'flex';
+                    this.announceAction(`⚠️ ${gangPlayer.name} 补杠 [${tileName}]：你满足抢杠胡${otherText}！`);
+                }
+            }, 800);
             return true;
         }
 
-        this.announceAction(`⚡ ${winners.map(i => this.players[i].name).join('、')} 抢杠胡 [${tileName}]！`);
         setTimeout(() => {
             if (this.gameState === 'PLAYING' && this.pendingQiangGang && this.pendingQiangGang.tile === tile) {
-                this.pendingQiangGang = null;
-                this.handleWin(winners, gangPlayerIdx, tile, false, 'QIANG_GANG_HU');
+                this.announceAction(`⚡ ${winners.map(i => this.players[i].name).join('、')} 抢杠胡 [${tileName}]！`);
+                setTimeout(() => {
+                    if (this.gameState === 'PLAYING' && this.pendingQiangGang && this.pendingQiangGang.tile === tile) {
+                        this.pendingQiangGang = null;
+                        this.handleWin(winners, gangPlayerIdx, tile, false, 'QIANG_GANG_HU');
+                    }
+                }, 500);
             }
         }, 800);
         return true;
     }
 
-    executeBuGang(gangPlayerIdx, tile) {
+    // ★抢杠时序补丁：补杠的"亮杠"阶段——播音效、暗手去牌、碰 meld 变杠（第4张亮出）+公告。杠分与摸补牌留给 executeBuGang。
+    revealBuGang(gangPlayerIdx, tile) {
         const player = this.players[gangPlayerIdx];
         sound.playGang('bugang');
-        
+
         const idx = player.hand.indexOf(tile);
         if (idx >= 0) player.hand.splice(idx, 1);
         player.hand = sortTiles(player.hand);
-        
+
         const targetMeld = player.melds.find(m => (m.type === 'peng' || m.type === 'gang') && m.tiles[0] === tile);
         if (targetMeld) {
             targetMeld.type = 'gang';
@@ -2644,10 +2656,19 @@ class MahjongGame {
             }
         }
 
-        this.applyGangScore(gangPlayerIdx, false, -1);
         const tileP = parseTile(tile);
         const tileName = tileP.suit === SUITS.ZHONG ? '红中' : `${tileP.num}${tileP.char}`;
         this.announceAction(`💥 ${player.name} 补杠 [${tileName}]！`);
+        this.updateUI();
+    }
+
+    executeBuGang(gangPlayerIdx, tile, alreadyRevealed = false) {
+        const player = this.players[gangPlayerIdx];
+        if (!alreadyRevealed) {
+            this.revealBuGang(gangPlayerIdx, tile);
+        }
+
+        this.applyGangScore(gangPlayerIdx, false, -1);
 
         if (this.deck.length > 0) player.hand.push(this.deck.pop());
         this.updateUI();
@@ -3027,7 +3048,8 @@ window.onload = function() {
                 game.announceAction(`⚡ ${aiWinners.map(i => game.players[i].name).join('、')} 抢杠胡 [${tileName}]！`);
                 setTimeout(() => game.handleWin(aiWinners, gangPlayerIdx, tile, false, 'QIANG_GANG_HU'), 500);
             } else {
-                game.executeBuGang(gangPlayerIdx, tile);
+                // ★抢杠时序补丁：亮杠已在 tryBuGang 中完成，这里只做落杠（杠分+摸补牌+继续回合）
+                game.executeBuGang(gangPlayerIdx, tile, true);
             }
             return;
         }
