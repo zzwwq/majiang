@@ -644,9 +644,9 @@
         <div class="controls-group" data-page-node-id="KcxxeaZZo70QBiPsWYYphc">
             <select id="modeSelect" data-page-node-id="28KAqi1KivbeEZSEwCb6X3">
                 <option value="practice" data-page-node-id="NtAFuNHPkKEihBotkAqE3X">练习模式 (点击AI头像看决策全过程)</option>
-                <option value="real" data-page-node-id="M9FOF0QE9FzXGq1loUV9FT">实战模式 (盲打)</option>
+                <option value="real" selected data-page-node-id="M9FOF0QE9FzXGq1loUV9FT">实战模式 (盲打)</option>
             </select>
-            <button id="btnToggleAIHand" class="btn-gold" style="display:inline-block;" data-page-node-id="1YoieDXPQ0WUltU9p3XmTh">👁️ 隐藏AI手牌</button>
+            <button id="btnToggleAIHand" class="btn-gold" style="display:none;" data-page-node-id="1YoieDXPQ0WUltU9p3XmTh">👁️ 显示AI手牌</button>
             <label data-page-node-id="NTannZPDxYOQczVd3Tgmgh">底分:
                 <select id="stakeSelect" data-page-node-id="CUVd9v50mzmLFQHO8CuJap">
                     <option value="5" data-page-node-id="4hHL0SPoxRZonHKkjogoRs">5元档</option>
@@ -1944,8 +1944,8 @@ class MahjongGame {
         this.turn = 0;
         this.deck = [];
         this.gameState = 'IDLE';
-        this.mode = 'practice';
-        this.showAITiles = true;
+        this.mode = 'real'; // 默认实战模式（盲打）
+        this.showAITiles = false;
         this.selectedTileIndex = -1;
         this.lastDiscard = null;
         this.lastDiscarder = -1;
@@ -2848,7 +2848,8 @@ class MahjongGame {
                     return this.renderTileHtml(t, false, i === this.selectedTileIndex, i, isDrawGapTile(i));
                 }).join('');
             } else {
-                const showFaceUp = (this.mode === 'practice' && this.showAITiles);
+                // 终局（胡牌/流局结算时）无论什么模式都亮出机器人手牌
+                const showFaceUp = (this.gameState === 'GAME_OVER') || (this.mode === 'practice' && this.showAITiles);
                 if (showFaceUp) {
                     handEl.innerHTML = p.hand.map((t, i) => {
                         return this.renderTileHtml(t, true, false, -1, isDrawGapTile(i));
@@ -3041,6 +3042,7 @@ window.onload = function() {
         game.mode = e.target.value;
         if (game.mode === 'practice') {
             btnToggleAIHand.style.display = 'inline-block';
+            btnToggleAIHand.innerText = game.showAITiles ? "👁️ 隐藏AI手牌" : "👁️ 显示AI手牌";
         } else {
             btnToggleAIHand.style.display = 'none';
             game.showAITiles = false;
