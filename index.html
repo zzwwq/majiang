@@ -2392,8 +2392,11 @@ class MahjongGame {
                     else gangDiffs[i] -= ptsEach;
                 }
             } else if (g.type === 'zhigang' || g.type === 'minggang') {
-                gangDiffs[g.playerIdx] += 15;
-                gangDiffs[g.sourceIdx] -= 15;
+                // ★直杠底分缩放修正（2026-10-04）：原先写死 15 分，不随底分变化。
+                // 设计文档口径：5 元档直杠 15（= stake×3），10 元档应 ×2、20 元档应 ×4，与暗杠/补杠一致。
+                const pts = stake * 3;
+                gangDiffs[g.playerIdx] += pts;
+                gangDiffs[g.sourceIdx] -= pts;
             } else if (g.type === 'jiagang') {
                 const ptsEach = stake * 1;
                 for (let i = 0; i < 4; i++) {
