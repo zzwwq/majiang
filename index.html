@@ -973,6 +973,9 @@ class MahjongEvaluator {
     }
 }
 
+// ★碰牌路线改造：牌墙剩余张数 ≤ 此值视为残局（满墙 60 张的 1/3，可调）
+const PENG_LATE_GAME_WALL = 20;
+
 class RobotAI {
     // 修正策略定位逻辑：结合刻子数与对子数，准确区别【大对子】与【七小对】
     static analyzeHandDirection(hand, melds) {
@@ -1113,13 +1116,61 @@ class RobotAI {
         return maxScore;
     }
 
-    static evaluatePengDecision(aiPlayer, tile) {
+    // ★碰牌路线改造：统计一张牌在全场明牌（所有人弃牌+碰杠）中已可见张数。
+    // 对子死活判定用：第3张剩余 = 4 - 手里2张 - 可见张数；剩余0 = 死对（永远凑不成刻子）。
+    static countTileVisible(game, tile) {
+        let visible = 0;
+        (game.players || []).forEach(p => {
+            (p.discards || []).forEach(t => { if (t === tile) visible++; });
+            (p.melds || []).forEach(m => (m.tiles || []).forEach(t => { if (t === tile) visible++; }));
+        });
+        return visible;
+    }
+
+    // ★碰牌路线改造：门清手牌的"七小对 vs 大对"路线统计。
+    // pairs/triplets/quads = 手里对子/刻子/四张数；livePairs/deadPairs = 活对/死对数；
+    // liveSingles = 活单张数（★碰牌路线v6：这种牌还剩≥1张没露面，将来还能摸成对；
+    //                枯单张=3张全在明牌，永远配不成对，不算供给）；
+    // blocks = 组数（对+刻+四张）；blanks = 坯子（刻子+四张+活对，能最终变成刻子的原料）；
+    // spProgress = 七小对进度（对子 + 2×四张，满分 7）。
+    static analyzePairRoutes(game, hand) {
+        const counts = MahjongEvaluator.getCounts(hand);
+        let pairs = 0, triplets = 0, quads = 0, livePairs = 0, deadPairs = 0, liveSingles = 0;
+        for (const t in counts) {
+            if (counts[t] === 2) {
+                pairs++;
+                if (4 - 2 - RobotAI.countTileVisible(game, t) > 0) livePairs++; else deadPairs++;
+            } else if (counts[t] === 3) triplets++;
+            else if (counts[t] === 4) quads++;
+            else if (counts[t] === 1) {
+                if (4 - 1 - RobotAI.countTileVisible(game, t) > 0) liveSingles++;
+            }
+        }
+        return {
+            pairs, triplets, quads, livePairs, deadPairs, liveSingles,
+            blocks: pairs + triplets + quads,
+            blanks: triplets + quads + livePairs,
+            spProgress: pairs + quads * 2
+        };
+    }
+
+    // 碰牌决策。★碰牌路线v6：新增第三参 game（统计全场明牌与牌墙进度）。
+    // 门清且对子+刻子+四张 ≥4 时按"七小对 vs 大对"路线判定表决策（命中即停）。
+    // 原理：两路同分，谁近走谁；步数打平时碰胜（碰=确定收入+平胡兜底+杠上限，七小对零兜底）。
+    // 步数：七小对差 N 对 = 还要 N 次"摸成对"事件；大对碰完还差 3 刻 = 3 次"成刻"事件。
+    //   行1 差1对(进度≥6) → 拒守（1步 vs 3步）；
+    //   行2 差2对(进度5) → 拒守（2步 vs 3步；5全活对也守，死对不妨碍七小对，供给靠摸牌流）；
+    //   行3 差3对(进度4) → 早局且大对可成(刻+四+活对+活单≥4)碰 / 残局或凑不齐拒（3=3打平，碰的确定性胜）；
+    //   行4 差≥4对(进度≤3)或刻+四≥2 → 七小对无望：大对可成碰（残局也碰）/ 否则落回通用结构分逻辑。
+    // 不传 game（旧脚本兼容）或清一色定性手牌 → 走原有通用逻辑，行为不变。
+    static evaluatePengDecision(aiPlayer, tile, game) {
         const hand = aiPlayer.hand;
         const targetStrategy = RobotAI.analyzeHandDirection(hand, aiPlayer.melds);
         const parsed = parseTile(tile);
         const tileName = parsed.suit === SUITS.ZHONG ? '红中' : `${parsed.num}${parsed.char}`;
 
-        if (targetStrategy.type === 'SEVEN_PAIRS') {
+        // ★碰牌路线改造：兼容旧两参调用——保留原"七小对定性拒碰"行为
+        if (!game && targetStrategy.type === 'SEVEN_PAIRS') {
             return {
                 shouldPeng: false,
                 reason: `放弃碰 [${tileName}]：当前策略为【七小对】，碰牌会破坏门清！`,
@@ -1128,6 +1179,63 @@ class RobotAI {
                                <p>手牌定性为【七小对】，碰牌倒牌后将彻底无法达成七小对，故坚决放弃碰牌。</p>
                              </div>`
             };
+        }
+
+        // ★碰牌路线v6：路线判定表（穷举七小对进度 0~6 全部取值，命中即停）
+        if (game && aiPlayer.melds.length === 0 && targetStrategy.type !== 'FLUSH') {
+            const info = RobotAI.analyzePairRoutes(game, hand);
+            if (info.blocks >= 4) {
+                const prog = `七小对进度 ${info.spProgress}/7`;
+                const early = game.deck.length > PENG_LATE_GAME_WALL;
+                // 大对可成：碰完还差 3 刻，来源 = 刻子/四张 + 剩余活对 + 活单张，合计 ≥4 才凑得齐
+                const tripletSources = info.triplets + info.quads + info.livePairs + info.liveSingles;
+                const canBig = tripletSources >= 4;
+                const mk = (shouldPeng, title, color, reason, detail) => ({
+                    shouldPeng,
+                    reason,
+                    detailHtml: `<div class="log-item">
+                               <p style="color:${color}; font-weight:bold;">⚡ 碰牌响应评估：${title} [${tileName}]</p>
+                               <p>${detail}</p>
+                             </div>`
+                });
+                // 行1：差 1 对（进度≥6）→ 拒守
+                if (info.spProgress >= 6) {
+                    return mk(false, '过碰', '#f39c12',
+                        `放弃碰 [${tileName}]：${prog}只差 1 对，锁死保七小对（最后一张可点炮胡）。`,
+                        `七小对还差 1 次摸成对，比碰后还差 3 组刻子更近；碰牌毁门清且手形回不了头。`);
+                }
+                // 行2：差 2 对（进度=5）→ 拒守
+                if (info.spProgress === 5) {
+                    return mk(false, '过碰', '#f39c12',
+                        `放弃碰 [${tileName}]：${prog}差 2 对，守七小对（最后一张可点炮胡）。`,
+                        `七小对还差 2 次摸成对，比碰后还差 3 组刻子更近；死对不妨碍七小对进度，枯单张打掉后摸上来的新牌就是新供给。`);
+                }
+                // 行3：差 3 对（进度=4）→ 步数打平（3 vs 3），碰的确定性胜，但需早局+原料够
+                if (info.spProgress === 4) {
+                    if (!canBig) {
+                        return mk(false, '过碰', '#f39c12',
+                            `放弃碰 [${tileName}]：${prog}差 3 对，碰后成刻来源仅 ${tripletSources} 个凑不齐 4 组刻子，保七小对。`,
+                            `大对路线已封顶（刻子/四张 ${info.triplets + info.quads} + 活对 ${info.livePairs} + 活单张 ${info.liveSingles}），碰了也凑不齐，守门清等摸牌补供给。`);
+                    }
+                    if (!early) {
+                        return mk(false, '过碰', '#bdc3c7',
+                            `放弃碰 [${tileName}]：差 3 对均势区但已到残局（牌墙仅余 ${game.deck.length} 张），滚不动大对雪球，保七小对双路线。`,
+                            `残局时间预算不足，碰完后续刻子接不上，守七小对每摸一对都是实进度。`);
+                    }
+                    return mk(true, '决定碰', '#2ecc71',
+                        `碰 [${tileName}]：差 3 对均势区，早局（牌墙余 ${game.deck.length} 张）且成刻来源 ${tripletSources} 个，先碰先赢转大对。`,
+                        `碰=到手 1 刻+补摸 1 张，对平胡也是面子；剩余活对 ${info.livePairs - 1} 个继续接力，唯一代价是放弃七小对。`);
+                }
+                // 行4：差≥4对（进度≤3）或 刻子+四张≥2 → 七小对已无望
+                if (info.spProgress <= 3 || info.triplets + info.quads >= 2) {
+                    if (canBig) {
+                        return mk(true, '决定碰', '#2ecc71',
+                            `碰 [${tileName}]：${prog}${info.triplets + info.quads >= 2 ? `、已有 ${info.triplets + info.quads} 组刻杠` : ''}，七小对已无望，碰锁定刻子服务大对/平胡。`,
+                            `成刻来源 ${tripletSources} 个（刻子/四张 ${info.triplets + info.quads} + 活对 ${info.livePairs} + 活单张 ${info.liveSingles}）足够 4 组刻子，碰对平胡也是面子。`);
+                    }
+                    // 凑不齐 → 落回下方通用结构分逻辑
+                }
+            }
         }
 
         let pCount = 0;
@@ -2163,7 +2271,7 @@ class MahjongGame {
             }
 
             if (count === 2) {
-                const pengEval = RobotAI.evaluatePengDecision(aiPlayer, tile);
+                const pengEval = RobotAI.evaluatePengDecision(aiPlayer, tile, this);
                 // 追加决策日志
                 aiPlayer.decisionLogs.push(pengEval.detailHtml);
 
